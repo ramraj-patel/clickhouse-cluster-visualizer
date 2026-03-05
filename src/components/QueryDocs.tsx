@@ -1,6 +1,6 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import queriesMd from '../../QUERIES.md?raw'
+import queriesMd from '../../docs/QUERIES.md?raw'
 
 export function QueryDocs() {
   return (

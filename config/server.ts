@@ -2,17 +2,15 @@ import express from 'express'
 import cors from 'cors'
 import axios from 'axios'
 import { existsSync } from 'fs'
-import { join, dirname } from 'path'
-import { fileURLToPath } from 'url'
-
-const __dirname = dirname(fileURLToPath(import.meta.url))
+import { join } from 'path'
 
 const app = express()
 app.use(cors())
 app.use(express.json())
 
 // Serve built frontend when dist/ exists (Docker / production mode)
-const distDir = join(__dirname, 'dist')
+// process.cwd() is always the project root regardless of where this file lives
+const distDir = join(process.cwd(), 'dist')
 if (existsSync(distDir)) {
   app.use(express.static(distDir))
 }
@@ -48,7 +46,7 @@ app.get('/api/ping', (_req, res) => res.json({ ok: true }))
 
 // SPA fallback — serve index.html for any non-API route (production mode)
 if (existsSync(distDir)) {
-  app.get('*', (_req, res) => res.sendFile(join(distDir, 'index.html')))
+  app.get('*', (_req, res) => res.sendFile(join(process.cwd(), 'dist', 'index.html')))
 }
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3001

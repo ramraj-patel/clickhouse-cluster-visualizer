@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+}
+
+/* React Flow overrides */
+.react-flow__controls button {
+  background: #1a1d27 !important;
+  border-color: #2a2d3e !important;
+  color: #e2e8f0 !important;
+}
+
+.react-flow__controls button:hover {
+  background: #2a2d3e !important;
+}

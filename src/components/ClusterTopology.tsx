@@ -1,4 +1,5 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import ReactFlow, {
   Background,
   Controls,
@@ -11,12 +12,17 @@ import ReactFlow, {
   MarkerType,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
-import { ChevronDown, Search, X, Check, Copy } from 'lucide-react'
-import type { ClusterNode, ReplicaInfo } from '../types'
+import { ChevronDown, Search, X, Check, Copy, ExternalLink } from 'lucide-react'
+import { fetchPartsSummary } from '../api/clickhouse'
+import { fmtBytes, fmtRows } from '../utils/format'
+import { safeNum } from '../api/clickhouse'
+import type { ClusterNode, ReplicaInfo, DistributedTable, ConnectionConfig } from '../types'
 
 interface Props {
   clusters: ClusterNode[]
   replicas: ReplicaInfo[]
+  tables?: DistributedTable[]
+  config?: ConnectionConfig
 }
 
 // ─── Copy button ─────────────────────────────────────────────────────────────
@@ -110,6 +116,7 @@ const SHARD_INNER_Y     = 62   // y inside shard where first replica starts (bel
 function buildGraph(clusters: ClusterNode[], replicas: ReplicaInfo[]) {
   const nodes: Node[] = []
   const edges: Edge[] = []
+  const nodeToCluster = new Map<string, ClusterNode>()
 
   // cluster → shard → replicas
   const clusterMap = new Map<string, Map<number, ClusterNode[]>>()
@@ -320,6 +327,7 @@ function buildGraph(clusters: ClusterNode[], replicas: ReplicaInfo[]) {
         const totalQueue     = rs.reduce((s, r) => s + r.queue_size, 0)
 
         const replicaNodeId = `replica-${clusterName}-${shardNum}-${node.replica_num}`
+        nodeToCluster.set(replicaNodeId, node)
         nodes.push({
           id: replicaNodeId,
           type: 'default',
@@ -425,7 +433,271 @@ function buildGraph(clusters: ClusterNode[], replicas: ReplicaInfo[]) {
 
   if (rowIndex < 2) twoRowsBottomY = rowY + rowHeight
 
-  return { nodes, edges, twoRowBounds: { x: 0, y: 0, width: maxX, height: twoRowsBottomY } }
+  return { nodes, edges, twoRowBounds: { x: 0, y: 0, width: maxX, height: twoRowsBottomY }, nodeToCluster }
+}
+
+// ─── Parse Distributed engine_full ───────────────────────────────────────────
+
+function parseDistributedEngine(engineFull: string) {
+  const m = engineFull.match(/Distributed\(\s*'([^']+)'\s*,\s*'([^']+)'\s*,\s*'([^']+)'(?:\s*,\s*(.+?))?\s*\)/)
+  if (!m) return null
+  return { cluster: m[1], targetDb: m[2], targetTable: m[3], shardKey: m[4]?.trim() ?? null }
+}
+
+// ─── Node drill-down panel ────────────────────────────────────────────────────
+
+function NodeDrillDownPanel({
+  node,
+  replicas,
+  onClose,
+}: {
+  node: ClusterNode
+  replicas: ReplicaInfo[]
+  onClose: () => void
+}) {
+  const nodeReplicas = replicas.filter(r => r.replica_name === node.host_name)
+
+  return (
+    <div className="absolute right-0 top-0 h-full w-80 bg-ch-surface border-l border-ch-border shadow-2xl z-50 flex flex-col overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-ch-border flex-shrink-0">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+            node.errors_count > 5 ? 'bg-red-500' : node.estimated_recovery_time > 0 ? 'bg-yellow-500' : 'bg-green-500'
+          }`} />
+          <span className="text-sm font-semibold text-ch-text truncate">{node.host_name}</span>
+        </div>
+        <button onClick={onClose} className="text-ch-muted hover:text-ch-text transition-colors p-1 rounded hover:bg-ch-bg flex-shrink-0">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Host info grid */}
+        <section>
+          <h3 className="text-[10px] font-semibold text-ch-muted uppercase tracking-wider mb-2">Host info</h3>
+          <div className="grid grid-cols-2 gap-1.5">
+            {[
+              { label: 'Address',  value: `${node.host_address}:${node.port}` },
+              { label: 'Cluster',  value: node.cluster },
+              { label: 'Shard',    value: `#${node.shard_num}` },
+              { label: 'Replica',  value: `#${node.replica_num}` },
+            ].map(item => (
+              <div key={item.label} className="bg-ch-bg rounded-lg px-2.5 py-2">
+                <div className="text-[9px] text-ch-muted uppercase tracking-wider">{item.label}</div>
+                <div className="text-xs text-ch-text font-mono mt-0.5 truncate" title={item.value}>{item.value}</div>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-1.5 mt-1.5">
+            {node.is_local === 1 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded border bg-blue-500/10 text-blue-400 border-blue-500/20">LOCAL</span>
+            )}
+            {node.errors_count > 0 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded border bg-red-500/10 text-red-400 border-red-500/20">
+                {node.errors_count} errors
+              </span>
+            )}
+            {node.slowdowns_count > 0 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded border bg-yellow-500/10 text-yellow-400 border-yellow-500/20">
+                {node.slowdowns_count} slowdowns
+              </span>
+            )}
+            {node.estimated_recovery_time > 0 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded border bg-orange-500/10 text-orange-400 border-orange-500/20">
+                recovering ~{node.estimated_recovery_time}s
+              </span>
+            )}
+          </div>
+        </section>
+
+        {/* Replicated tables on this node */}
+        <section>
+          <h3 className="text-[10px] font-semibold text-ch-muted uppercase tracking-wider mb-2">
+            Replicated tables ({nodeReplicas.length})
+          </h3>
+          {nodeReplicas.length === 0 ? (
+            <p className="text-xs text-ch-muted">No replicated tables found for this host.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {nodeReplicas.map(r => {
+                const isHealthy = !r.is_readonly && !r.is_session_expired && r.absolute_delay < 60
+                return (
+                  <div
+                    key={`${r.database}.${r.table}`}
+                    className={`bg-ch-bg rounded-lg px-3 py-2 border ${
+                      r.is_readonly || r.is_session_expired ? 'border-red-500/30' :
+                      r.absolute_delay > 300 ? 'border-yellow-500/30' : 'border-ch-border/50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isHealthy ? 'bg-green-500' : 'bg-yellow-500'}`} />
+                      <span className="text-[11px] font-semibold text-ch-text truncate">
+                        <span className="text-ch-muted font-normal">{r.database}.</span>{r.table}
+                      </span>
+                      {r.is_leader === 1 && <span title="Leader" className="text-[10px] ml-auto">👑</span>}
+                    </div>
+                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-ch-muted">
+                      {r.queue_size > 0 && (
+                        <span className="text-yellow-400">q:{r.queue_size}</span>
+                      )}
+                      {r.absolute_delay > 0 && (
+                        <span className={r.absolute_delay > 300 ? 'text-red-400' : r.absolute_delay > 60 ? 'text-yellow-400' : ''}>
+                          lag:{r.absolute_delay}s
+                        </span>
+                      )}
+                      <span>{r.active_replicas}/{r.total_replicas} active</span>
+                      {r.is_readonly === 1 && <span className="text-red-400">READONLY</span>}
+                      {r.is_session_expired === 1 && <span className="text-orange-400">ZK EXPIRED</span>}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </section>
+      </div>
+
+      <div className="px-4 py-2 border-t border-ch-border text-[9px] text-ch-muted flex-shrink-0">
+        Data from last cluster poll · 30s interval
+      </div>
+    </div>
+  )
+}
+
+// ─── Routing overlay panel ────────────────────────────────────────────────────
+
+function RoutingPanel({
+  table,
+  clusters,
+  config,
+  onClose,
+}: {
+  table: DistributedTable
+  clusters: ClusterNode[]
+  config: ConnectionConfig
+  onClose: () => void
+}) {
+  const parsed = useMemo(() => parseDistributedEngine(table.engine_full), [table.engine_full])
+  const [loadSizes, setLoadSizes] = useState(false)
+
+  const { data: sizesData, isLoading: sizesLoading } = useQuery({
+    queryKey: ['parts_summary', config],
+    queryFn: () => fetchPartsSummary(config),
+    enabled: loadSizes,
+    staleTime: 60_000,
+  })
+
+  if (!parsed) return null
+
+  const clusterShards = useMemo(() => {
+    const shardMap = new Map<number, ClusterNode[]>()
+    for (const c of clusters) {
+      if (c.cluster !== parsed.cluster) continue
+      if (!shardMap.has(c.shard_num)) shardMap.set(c.shard_num, [])
+      shardMap.get(c.shard_num)!.push(c)
+    }
+    return [...shardMap.entries()].sort((a, b) => a[0] - b[0])
+  }, [clusters, parsed.cluster])
+
+  const totalWeight = clusterShards.reduce((s, [, nodes]) => s + (nodes[0]?.shard_weight ?? 1), 0)
+
+  const tableSizes = useMemo(() => {
+    if (!sizesData) return null
+    return sizesData.find(s =>
+      s.database === parsed.targetDb && s.table === parsed.targetTable
+    )
+  }, [sizesData, parsed])
+
+  return (
+    <div className="absolute right-0 top-0 h-full w-80 bg-ch-surface border-l border-ch-border shadow-2xl z-50 flex flex-col overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-ch-border flex-shrink-0">
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-ch-text truncate">{table.database}.{table.name}</div>
+          <div className="text-[10px] text-ch-muted">Routing overlay</div>
+        </div>
+        <button onClick={onClose} className="text-ch-muted hover:text-ch-text transition-colors p-1 rounded hover:bg-ch-bg">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Table info */}
+        <section>
+          <div className="space-y-1.5 text-xs">
+            <div className="flex gap-2"><span className="text-ch-muted w-20 flex-shrink-0">Cluster</span><span className="text-ch-accent font-mono">{parsed.cluster}</span></div>
+            <div className="flex gap-2"><span className="text-ch-muted w-20 flex-shrink-0">Target</span><span className="text-ch-text font-mono">{parsed.targetDb}.{parsed.targetTable}</span></div>
+            {parsed.shardKey && (
+              <div className="flex gap-2"><span className="text-ch-muted w-20 flex-shrink-0">Shard key</span><span className="text-ch-text font-mono">{parsed.shardKey}</span></div>
+            )}
+          </div>
+        </section>
+
+        {/* Shard routing weights */}
+        <section>
+          <h3 className="text-[10px] font-semibold text-ch-muted uppercase tracking-wider mb-2">
+            Shard routing weights
+          </h3>
+          <div className="space-y-2">
+            {clusterShards.map(([shardNum, nodes]) => {
+              const weight    = nodes[0]?.shard_weight ?? 1
+              const pct       = totalWeight > 0 ? (weight / totalWeight) * 100 : 0
+              const hostNames = nodes.map(n => n.host_name).join(', ')
+              return (
+                <div key={shardNum}>
+                  <div className="flex items-center justify-between text-[11px] mb-1">
+                    <span className="text-ch-text font-semibold">Shard {shardNum}</span>
+                    <span className="text-ch-muted font-mono">{pct.toFixed(0)}% (w:{weight})</span>
+                  </div>
+                  <div className="w-full h-2 bg-ch-bg rounded overflow-hidden">
+                    <div className="h-full bg-ch-accent/60 rounded" style={{ width: `${pct}%` }} />
+                  </div>
+                  <div className="text-[9px] text-ch-muted mt-0.5 truncate">{hostNames}</div>
+                </div>
+              )
+            })}
+          </div>
+          <p className="text-[9px] text-ch-muted mt-2">
+            Weights from system.clusters — reflects configured routing probability.
+          </p>
+        </section>
+
+        {/* Local data sizes (opt-in) */}
+        <section>
+          <h3 className="text-[10px] font-semibold text-ch-muted uppercase tracking-wider mb-2">
+            Data on connected node
+          </h3>
+          {!loadSizes ? (
+            <div>
+              <button
+                onClick={() => setLoadSizes(true)}
+                className="flex items-center gap-1.5 text-xs text-ch-accent border border-ch-accent/30 rounded-lg px-2.5 py-1.5 hover:bg-ch-accent/10 transition-colors"
+              >
+                <ExternalLink className="w-3 h-3" /> Load local sizes
+              </button>
+              <p className="text-[9px] text-ch-muted mt-1">
+                Queries system.parts on this node only.
+              </p>
+            </div>
+          ) : sizesLoading ? (
+            <div className="text-xs text-ch-muted animate-pulse">Loading…</div>
+          ) : tableSizes ? (
+            <div className="space-y-1 text-xs">
+              <div className="flex gap-2"><span className="text-ch-muted w-24">Compressed</span><span className="text-ch-text">{fmtBytes(safeNum(tableSizes.total_bytes))}</span></div>
+              <div className="flex gap-2"><span className="text-ch-muted w-24">Uncompressed</span><span className="text-ch-text">{fmtBytes(safeNum(tableSizes.total_uncompressed))}</span></div>
+              <div className="flex gap-2"><span className="text-ch-muted w-24">Rows</span><span className="text-ch-text">{fmtRows(safeNum(tableSizes.total_rows))}</span></div>
+              <div className="flex gap-2"><span className="text-ch-muted w-24">Parts</span><span className="text-ch-text">{safeNum(tableSizes.part_count)}</span></div>
+              <p className="text-[9px] text-ch-muted mt-1">Local shard data only. Use Parts tab for full cluster view.</p>
+            </div>
+          ) : (
+            <p className="text-xs text-ch-muted">
+              No local parts found for {parsed.targetDb}.{parsed.targetTable}.
+            </p>
+          )}
+        </section>
+      </div>
+    </div>
+  )
 }
 
 // ─── Cluster filter dropdown ─────────────────────────────────────────────────
@@ -548,14 +820,16 @@ function ClusterFilterDropdown({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function ClusterTopology({ clusters, replicas }: Props) {
+export function ClusterTopology({ clusters, replicas, tables = [], config }: Props) {
   const allClusterNames = useMemo(
     () => [...new Set(clusters.map(c => c.cluster))].sort(),
     [clusters]
   )
 
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(allClusterNames))
-  const [zoomOnScroll, setZoomOnScroll] = useState(true)
+  const [selected, setSelected]               = useState<Set<string>>(() => new Set(allClusterNames))
+  const [zoomOnScroll, setZoomOnScroll]        = useState(true)
+  const [selectedNode, setSelectedNode]        = useState<ClusterNode | null>(null)
+  const [selectedDistTable, setSelectedDistTable] = useState<DistributedTable | null>(null)
   const rfInstance = useRef<ReactFlowInstance | null>(null)
 
   useEffect(() => {
@@ -571,10 +845,34 @@ export function ClusterTopology({ clusters, replicas }: Props) {
     [clusters, selected]
   )
 
-  const { nodes, edges, twoRowBounds } = useMemo(
+  const { nodes: baseNodes, edges: baseEdges, twoRowBounds, nodeToCluster } = useMemo(
     () => buildGraph(filteredClusters, replicas),
     [filteredClusters, replicas]
   )
+
+  // Routing overlay edges when a Distributed table is selected
+  const { nodes, edges } = useMemo(() => {
+    if (!selectedDistTable) return { nodes: baseNodes, edges: baseEdges }
+    const parsed = parseDistributedEngine(selectedDistTable.engine_full)
+    if (!parsed) return { nodes: baseNodes, edges: baseEdges }
+
+    const clusterNodeId = `cluster-${parsed.cluster}`
+    const shardNums = [...new Set(
+      filteredClusters.filter(c => c.cluster === parsed.cluster).map(c => c.shard_num)
+    )]
+
+    const overlayEdges: Edge[] = shardNums.map(shardNum => ({
+      id: `routing-${parsed.cluster}-${shardNum}`,
+      source: clusterNodeId,
+      target: `shard-${parsed.cluster}-${shardNum}`,
+      animated: true,
+      style: { stroke: '#ffcc00', strokeWidth: 2, strokeDasharray: '6 3' },
+      markerEnd: { type: MarkerType.ArrowClosed, color: '#ffcc00' },
+      zIndex: 10,
+    }))
+
+    return { nodes: baseNodes, edges: [...baseEdges, ...overlayEdges] }
+  }, [baseNodes, baseEdges, selectedDistTable, filteredClusters])
 
   const fitTwoRows = () => {
     if (!rfInstance.current) return
@@ -592,6 +890,11 @@ export function ClusterTopology({ clusters, replicas }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, twoRowBounds])
 
+  const distTables = useMemo(
+    () => tables.filter(t => t.engine === 'Distributed'),
+    [tables]
+  )
+
   if (clusters.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-ch-muted">
@@ -600,10 +903,13 @@ export function ClusterTopology({ clusters, replicas }: Props) {
     )
   }
 
+  // Right panel: drill-down takes priority over routing
+  const showDrillDown = !!selectedNode
+  const showRouting   = !showDrillDown && !!selectedDistTable && !!config
+
   return (
-    <div className="w-full h-full">
+    <div className="w-full h-full relative">
       {selected.size === 0 ? (
-        // Empty state — still show the filter so user can re-select
         <div className="w-full h-full flex flex-col items-center justify-center gap-4">
           <span className="text-ch-muted text-sm">No clusters selected</span>
           <ClusterFilterDropdown
@@ -627,6 +933,15 @@ export function ClusterTopology({ clusters, replicas }: Props) {
             rfInstance.current = instance
             setTimeout(() => fitTwoRows(), 50)
           }}
+          onNodeClick={(_, node) => {
+            if (node.id.startsWith('replica-')) {
+              const clusterNode = nodeToCluster.get(node.id)
+              if (clusterNode) {
+                setSelectedNode(prev => prev?.host_name === clusterNode.host_name && prev?.shard_num === clusterNode.shard_num ? null : clusterNode)
+              }
+            }
+          }}
+          onPaneClick={() => setSelectedNode(null)}
         >
           <Background color="#2a2d3e" gap={24} />
           <Controls
@@ -678,7 +993,51 @@ export function ClusterTopology({ clusters, replicas }: Props) {
               </span>
             </div>
           </Panel>
+
+          {/* ── Bottom-left: routing table selector ── */}
+          {distTables.length > 0 && (
+            <Panel position="bottom-left">
+              <div className="bg-ch-surface/90 backdrop-blur border border-ch-border rounded-xl px-3 py-2 shadow-lg">
+                <select
+                  value={selectedDistTable ? `${selectedDistTable.database}.${selectedDistTable.name}` : ''}
+                  onChange={e => {
+                    const val = e.target.value
+                    if (!val) { setSelectedDistTable(null); return }
+                    const [db, name] = val.split('.')
+                    setSelectedDistTable(distTables.find(t => t.database === db && t.name === name) ?? null)
+                  }}
+                  className="bg-ch-bg border border-ch-border rounded-lg px-2.5 py-1.5 text-xs text-ch-text focus:outline-none focus:border-ch-accent/60 max-w-56"
+                >
+                  <option value="">Routing overlay: select table…</option>
+                  {distTables.map(t => (
+                    <option key={`${t.database}.${t.name}`} value={`${t.database}.${t.name}`}>
+                      {t.database}.{t.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </Panel>
+          )}
         </ReactFlow>
+      )}
+
+      {/* ── Node drill-down panel ── */}
+      {showDrillDown && (
+        <NodeDrillDownPanel
+          node={selectedNode!}
+          replicas={replicas}
+          onClose={() => setSelectedNode(null)}
+        />
+      )}
+
+      {/* ── Routing info panel ── */}
+      {showRouting && (
+        <RoutingPanel
+          table={selectedDistTable!}
+          clusters={filteredClusters}
+          config={config!}
+          onClose={() => setSelectedDistTable(null)}
+        />
       )}
     </div>
   )

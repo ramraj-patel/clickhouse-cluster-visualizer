@@ -5,6 +5,8 @@ import {
   fetchDistributedTables,
   fetchReplicationQueue,
   fetchMetrics,
+  fetchDiskHealth,
+  fetchServerErrors,
 } from '../api/clickhouse'
 import type { ConnectionConfig } from '../types'
 
@@ -53,6 +55,22 @@ export function useClusterData(config: ConnectionConfig | null) {
     staleTime: 10_000,
   })
 
+  const disks = useQuery({
+    queryKey: ['disks', config],
+    queryFn: () => fetchDiskHealth(config!),
+    enabled,
+    refetchInterval: REFETCH_INTERVAL,
+    staleTime: 10_000,
+  })
+
+  const serverErrors = useQuery({
+    queryKey: ['server_errors', config],
+    queryFn: () => fetchServerErrors(config!),
+    enabled,
+    refetchInterval: REFETCH_INTERVAL,
+    staleTime: 10_000,
+  })
+
   const isLoading =
     clusters.isLoading || replicas.isLoading || tables.isLoading
 
@@ -66,6 +84,8 @@ export function useClusterData(config: ConnectionConfig | null) {
     tables: tables.data ?? [],
     replicationQueue: replicationQueue.data ?? [],
     metrics: metrics.data ?? [],
+    disks: disks.data ?? [],
+    serverErrors: serverErrors.data ?? [],
     isLoading,
     error: error as Error | null,
     refetchAll: () => {
@@ -74,6 +94,8 @@ export function useClusterData(config: ConnectionConfig | null) {
       tables.refetch()
       replicationQueue.refetch()
       metrics.refetch()
+      disks.refetch()
+      serverErrors.refetch()
     },
   }
 }

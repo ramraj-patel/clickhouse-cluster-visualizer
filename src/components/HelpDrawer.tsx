@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { X, ChevronDown, ChevronRight, Database, GitBranch, Activity, TreePine, BarChart3, BookOpen } from 'lucide-react'
+import { X, ChevronDown, ChevronRight, Database, GitBranch, Activity, TreePine, BarChart3, BookOpen, FileText, HardDrive, Terminal, Wrench } from 'lucide-react'
 import type { ActiveTab } from '../types'
 
 interface Query {
@@ -233,6 +233,269 @@ ORDER BY event`,
         sql: `SELECT metric, value, description
 FROM system.asynchronous_metrics
 ORDER BY metric`,
+      },
+    ],
+  },
+
+  'query-log': {
+    icon: <FileText className="w-4 h-4" />,
+    title: 'Query Log',
+    description:
+      'Historical query analysis sourced from system.query_log — the append-only audit trail ClickHouse writes for every completed query. Choose a time window (5 min to 24 h), filter by database or table, search by query substring, and drill into distributed sub-queries, per-thread utilisation, and cross-shard breakdowns.',
+    significance: [
+      'query_log is written after a query completes (or fails) — it is not live. Use the Processes tab for in-flight queries.',
+      'Only initial queries (is_initial_query = 1) are shown by default. Distributed sub-queries that run on remote shards are nested inside each top-level row — this avoids confusing duplicates in the list.',
+      'Server-side filters (database, table, search) are applied in SQL before results reach the browser — useful for narrowing large clusters with thousands of queries per minute.',
+      'Auto-refresh is disabled by default (Paused). Enable it to get a rolling live view at the selected time window.',
+      'The Hotspots view aggregates by table to show which tables absorb the most query CPU/memory over the selected window — useful for schema or index tuning decisions.',
+      'Thread detail (from system.query_thread_log) shows per-thread CPU and memory for a single query. Requires log_query_threads = 1 in server config — without it system.query_thread_log is not populated.',
+      'Cross-shard view uses clusterAllReplicas() to gather query_log from all shards for a given query ID. It is slow and opt-in — select a cluster and click "Load all shards".',
+    ],
+    signals: [
+      { label: 'type = ExceptionBeforeStart / ExceptionWhileProcessing', meaning: 'Query failed — see exception field for reason', severity: 'danger' },
+      { label: 'memory_usage > 1 GB', meaning: 'Single query consuming significant RAM — OOM risk on constrained nodes', severity: 'warn' },
+      { label: 'marks_read very high', meaning: 'Sparse index is not filtering effectively — consider adjusting ORDER BY or adding a skip index', severity: 'warn' },
+      { label: 'Table hotspot showing repeated scans', meaning: 'A table is scanned by many queries — consider materialised views or pre-aggregation', severity: 'info' },
+      { label: 'Thread detail empty', meaning: 'log_query_threads = 1 is not set — enable in config.xml or users.xml', severity: 'info' },
+    ],
+    queries: [
+      {
+        label: 'system.query_log — top-level queries (configurable window)',
+        sql: `SELECT
+  query_id, user, query, type,
+  event_time, query_duration_ms,
+  read_rows, read_bytes, memory_usage,
+  ProfileEvents['SelectedMarks']         AS marks_read,
+  ProfileEvents['FileOpen']              AS ranges_selected,
+  ProfileEvents['RealTimeMicroseconds']  AS real_time_us,
+  ProfileEvents['UserTimeMicroseconds']  AS user_time_us,
+  ProfileEvents['SystemTimeMicroseconds'] AS system_time_us,
+  ProfileEvents['CompressedReadBufferBytes'] AS read_compressed_bytes,
+  ProfileEvents['NumberOfDedicatedLogFiles'] AS thread_count,
+  exception, exception_code,
+  initial_user, interface, client_name,
+  databases, tables, current_database, is_initial_query
+FROM system.query_log
+WHERE type != 'QueryStart'
+  AND is_initial_query = 1
+  AND event_time >= now() - INTERVAL 60 MINUTE
+ORDER BY event_time DESC
+LIMIT 200`,
+      },
+      {
+        label: 'system.query_log — sub-queries for a distributed query',
+        sql: `SELECT
+  query_id, initial_query_id,
+  query_duration_ms, read_rows, read_bytes, memory_usage,
+  ProfileEvents['SelectedMarks'] AS marks_read
+FROM system.query_log
+WHERE initial_query_id = '<query_id>'
+  AND is_initial_query = 0
+  AND type != 'QueryStart'
+ORDER BY event_time`,
+      },
+      {
+        label: 'system.query_thread_log — per-thread detail (requires log_query_threads = 1)',
+        sql: `SELECT
+  thread_name, thread_id,
+  read_rows, read_bytes, memory_usage,
+  ProfileEvents['RealTimeMicroseconds']  AS real_us,
+  ProfileEvents['UserTimeMicroseconds']  AS user_us,
+  ProfileEvents['SystemTimeMicroseconds'] AS sys_us,
+  ProfileEvents['SelectedMarks']         AS marks_read
+FROM system.query_thread_log
+WHERE query_id = '<query_id>'
+ORDER BY real_us DESC`,
+      },
+      {
+        label: 'system.query_log — table hotspots (aggregated by window)',
+        sql: `SELECT
+  arrayJoin(tables)      AS table_name,
+  count()                AS query_count,
+  sum(query_duration_ms) AS total_duration_ms,
+  sum(read_rows)         AS total_rows_read,
+  sum(read_bytes)        AS total_bytes_read
+FROM system.query_log
+WHERE type = 'QueryFinish'
+  AND is_initial_query = 1
+  AND event_time >= now() - INTERVAL 60 MINUTE
+GROUP BY table_name
+ORDER BY total_bytes_read DESC
+LIMIT 50`,
+      },
+      {
+        label: 'clusterAllReplicas — cross-shard breakdown for a query ID',
+        sql: `SELECT
+  _shard_num, hostName() AS host, query_id,
+  query_duration_ms, read_rows, read_bytes, memory_usage,
+  ProfileEvents['SelectedMarks'] AS marks_read,
+  ProfileEvents['RealTimeMicroseconds'] AS real_us,
+  ProfileEvents['UserTimeMicroseconds'] AS user_us,
+  length(thread_ids) AS thread_count
+FROM clusterAllReplicas('<cluster_name>', system.query_log)
+WHERE query_id = '<query_id>'
+  AND type != 'QueryStart'
+ORDER BY _shard_num`,
+      },
+      {
+        label: 'system.query_log — filter options (databases & tables)',
+        sql: `-- Databases (union current_database + DB extracted from tables array)
+SELECT DISTINCT v FROM (
+  SELECT current_database AS v FROM system.query_log
+  WHERE event_time >= now() - INTERVAL 60 MINUTE AND current_database != ''
+  UNION ALL
+  SELECT arrayJoin(arrayMap(t -> splitByChar('.', t)[1], tables)) AS v
+  FROM system.query_log
+  WHERE event_time >= now() - INTERVAL 60 MINUTE AND notEmpty(tables)
+) WHERE v != '' ORDER BY v LIMIT 300;
+
+-- Tables
+SELECT DISTINCT arrayJoin(tables) AS v
+FROM system.query_log
+WHERE event_time >= now() - INTERVAL 60 MINUTE
+  AND notEmpty(tables)
+ORDER BY v LIMIT 500`,
+      },
+    ],
+  },
+
+  parts: {
+    icon: <HardDrive className="w-4 h-4" />,
+    title: 'Parts Inspector',
+    description:
+      'Inspects the physical storage structure of your MergeTree tables. Every INSERT creates one or more "parts" — immutable columnar files on disk. ClickHouse merges small parts into larger ones in the background. This tab shows the health of that process: how many parts exist per partition, whether merges are keeping up, compression effectiveness, and active merge progress.',
+    significance: [
+      'Parts count directly impacts query performance — too many small parts means more files to open per query, more memory for index caching, and slower merges.',
+      'The "too many parts" problem (MaxPartCountForPartition > 300 in system.metrics) is one of the most common ClickHouse performance issues. This tab shows which table and partition is causing it.',
+      'Compression ratio (uncompressed / compressed) tells you how effectively ClickHouse is compressing a table. A ratio < 2 is low — consider changing the codec or sort order.',
+      'Active merges banner shows which merges are currently running, their progress percentage, and estimated time to completion.',
+      'Part history (from system.part_log) shows how a table\'s part count evolved — useful for diagnosing sudden ingestion bursts or merge failures.',
+    ],
+    signals: [
+      { label: 'Parts per partition > 300', meaning: 'Critical: merges falling far behind ingestion — insert throttling may kick in', severity: 'danger' },
+      { label: 'Parts per partition > 100', meaning: 'Warning: too many parts — background merges are lagging', severity: 'warn' },
+      { label: 'Unmerged parts > 150', meaning: 'Large backlog of tiny parts — check insert rate and background_pool_size', severity: 'danger' },
+      { label: 'Compression ratio < 2', meaning: 'Poor compression — consider LZ4HC/ZSTD codec or improving sort key locality', severity: 'warn' },
+      { label: 'max_refcount > 1', meaning: 'A part is referenced by multiple snapshots — high memory use for mark cache', severity: 'info' },
+      { label: 'Active merge on a large partition', meaning: 'Long-running merge may delay subsequent inserts', severity: 'info' },
+    ],
+    queries: [
+      {
+        label: 'system.parts — table summary (GROUP BY)',
+        sql: `SELECT
+  database, table,
+  count()                                  AS total_parts,
+  countIf(active)                          AS active_parts,
+  sum(bytes_on_disk)                       AS compressed_bytes,
+  sum(data_uncompressed_bytes)             AS uncompressed_bytes,
+  sum(rows)                                AS total_rows,
+  max(refcount)                            AS max_refcount,
+  max(modification_time)                   AS last_modified,
+  countIf(NOT active)                      AS inactive_parts
+FROM system.parts
+GROUP BY database, table
+ORDER BY compressed_bytes DESC`,
+      },
+      {
+        label: 'system.parts — partition + part detail (per table)',
+        sql: `SELECT
+  partition, name, active, rows,
+  bytes_on_disk, data_uncompressed_bytes,
+  refcount, modification_time, min_date, max_date,
+  min_block_number, max_block_number, level
+FROM system.parts
+WHERE database = '<db>' AND table = '<table>'
+ORDER BY partition, min_block_number
+LIMIT 5000`,
+      },
+      {
+        label: 'system.merges — active merges in progress',
+        sql: `SELECT
+  database, table, partition, result_part_name,
+  elapsed, progress, num_parts,
+  rows_read, rows_written,
+  total_size_bytes_compressed, memory_usage
+FROM system.merges
+ORDER BY elapsed DESC`,
+      },
+      {
+        label: 'system.part_log — part event history (per table)',
+        sql: `SELECT
+  event_type, event_time, database, table, partition_id,
+  part_name, rows, size_in_bytes, duration_ms, error
+FROM system.part_log
+WHERE database = '<db>' AND table = '<table>'
+ORDER BY event_time DESC
+LIMIT 200`,
+      },
+    ],
+  },
+
+  processes: {
+    icon: <Terminal className="w-4 h-4" />,
+    title: 'Process Monitor',
+    description:
+      'A live view of all queries currently executing on this ClickHouse node, refreshed every 5 seconds. Shows memory consumption, elapsed time, rows processed, and the query text. Long-running queries can be cross-referenced in the Query Log tab via the "View in Log" button.',
+    significance: [
+      'system.processes is a real-time snapshot — every row is a query actively running right now. It resets completely between polls.',
+      'The elapsed column shows wall-clock time since the query started. A query running for minutes is a strong signal of a missing index, a table scan, or a runaway cartesian join.',
+      'Memory usage here is the live peak memory — useful for catching memory-heavy queries before they trigger OOM. Cross-check with max_memory_usage server setting.',
+      'Progress bars show rows read vs rows total (when the query planner has an estimate). Progress stalling at 0% usually means the query is waiting for a lock or ZooKeeper.',
+      'The query text is truncated in the card; click to expand the full query. Queries that include "system.processes" in their text are self-filtered from the list.',
+    ],
+    signals: [
+      { label: 'elapsed > 300s (red border)', meaning: 'Query running over 5 minutes — likely scanning without a useful index', severity: 'danger' },
+      { label: 'elapsed > 60s (yellow border)', meaning: 'Long-running query — investigate if not expected (e.g. bulk export)', severity: 'warn' },
+      { label: 'memory_usage > 500 MB', meaning: 'Heavy memory consumption — check for missing PREWHERE or large IN() lists', severity: 'warn' },
+      { label: 'total_rows_approx = 0', meaning: 'Query planner has no estimate — indeterminate progress bar is expected', severity: 'info' },
+      { label: 'is_cancelled = 1', meaning: 'Query has received a cancel signal and is winding down', severity: 'info' },
+    ],
+    queries: [
+      {
+        label: 'system.processes — live query list (5s refresh)',
+        sql: `SELECT
+  query_id, user, client_hostname, elapsed,
+  read_rows, read_bytes, total_rows_approx,
+  written_rows, memory_usage, peak_memory_usage,
+  query, is_cancelled, thread_ids,
+  ProfileEvents, Settings
+FROM system.processes
+ORDER BY elapsed DESC`,
+      },
+    ],
+  },
+
+  mutations: {
+    icon: <Wrench className="w-4 h-4" />,
+    title: 'Mutations Tracker',
+    description:
+      'Tracks in-flight and recently completed ALTER mutations on ReplicatedMergeTree tables. Mutations (ALTER UPDATE, ALTER DELETE, MATERIALIZE INDEX, etc.) rewrite existing parts on disk — they are the most resource-intensive write operations in ClickHouse and can run for hours on large tables.',
+    significance: [
+      'Mutations are not transactional — they run part-by-part in the background. A mutation is "complete" only when parts_to_do reaches 0.',
+      'Failed mutations (latest_fail_reason is not empty) stall all subsequent mutations on that table until resolved. The fail reason shown is the exact ClickHouse error.',
+      'A stuck mutation (parts_to_do has not decreased for a long time) usually means: disk full, a detached/broken part, or the background mutation thread is saturated.',
+      'parts_to_do_names shows exactly which parts still need to be rewritten — useful for diagnosing why a mutation is stuck on a specific partition.',
+      'Mutations propagate to all replicas independently. A mutation may be complete on one replica and still in-flight on another — check all nodes.',
+    ],
+    signals: [
+      { label: 'is_done = 0 with latest_fail_reason', meaning: 'Mutation failed and is stuck — unblock by investigating the error', severity: 'danger' },
+      { label: 'parts_to_do unchanged across refreshes', meaning: 'Mutation is stalled — check disk space and background_pool_size', severity: 'warn' },
+      { label: 'parts_to_do > 1000', meaning: 'Very large mutation backlog — may run for hours; avoid concurrent mutations', severity: 'warn' },
+      { label: 'command = DELETE with no WHERE partition filter', meaning: 'Full table scan mutation — extremely slow on large tables; prefer TTL instead', severity: 'warn' },
+      { label: 'Multiple concurrent mutations on same table', meaning: 'Mutations queue serially per table — they will all complete but latency multiplies', severity: 'info' },
+    ],
+    queries: [
+      {
+        label: 'system.mutations — all mutations (30s refresh)',
+        sql: `SELECT
+  database, table, mutation_id, command,
+  create_time, block_numbers.partition_id,
+  parts_to_do_names, parts_to_do,
+  is_done, latest_failed_part,
+  latest_fail_time, latest_fail_reason
+FROM system.mutations
+ORDER BY create_time DESC
+LIMIT 200`,
       },
     ],
   },

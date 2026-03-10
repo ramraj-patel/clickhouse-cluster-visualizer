@@ -103,7 +103,7 @@ cd cluster-visualizer
 
 **2. Build and start the container**
 ```bash
-docker compose up --build
+docker compose -f docker/docker-compose.yml up --build
 ```
 
 **3. Open the dashboard**
@@ -114,12 +114,12 @@ Navigate to http://localhost:3001 in your browser.
 
 **4. Stop the container**
 ```bash
-docker compose down
+docker compose -f docker/docker-compose.yml down
 ```
 
 ### Rebuild after code changes
 ```bash
-docker compose up --build
+docker compose -f docker/docker-compose.yml up --build
 ```
 
 ---
@@ -136,7 +136,7 @@ Output goes to `dist/`.
 
 **2. Start the proxy server**
 ```bash
-node --loader tsx/esm server.ts
+node --loader tsx/esm config/server.ts
 # or after compiling:
 npx tsc && node dist-server/server.js
 ```
@@ -151,29 +151,38 @@ Point any static file server at the `dist/` directory, or let the Express server
 
 ```
 cluster-visualizer/
-├── server.ts               # Express proxy server (Node.js)
+├── index.html              # Vite entry point
 ├── vite.config.ts          # Vite config — proxies /api to :3001 in dev
-├── src/
-│   ├── api/
-│   │   └── clickhouse.ts   # All ClickHouse query functions
-│   ├── components/
-│   │   ├── Dashboard.tsx
-│   │   ├── ClusterTopology.tsx
-│   │   ├── DistributedTables.tsx
-│   │   ├── ReplicationStatus.tsx
-│   │   ├── ZookeeperNodes.tsx
-│   │   ├── MetricsPanel.tsx
-│   │   ├── HelpDrawer.tsx
-│   │   └── QueryDocs.tsx
-│   ├── hooks/
-│   │   ├── useClusterData.ts
-│   │   ├── useMetricsHistory.ts
-│   │   └── usePinnedTables.ts
-│   └── types/
-│       └── index.ts
-├── QUERIES.md              # Documentation for all SQL queries used
-├── Dockerfile
-└── docker-compose.yml
+├── package.json
+├── tsconfig.json
+├── config/
+│   ├── server.ts           # Express proxy server (Node.js)
+│   ├── postcss.config.js   # PostCSS config (Tailwind + Autoprefixer)
+│   └── tailwind.config.js  # Tailwind theme and content paths
+├── docker/
+│   ├── Dockerfile          # Two-stage build (React → Node)
+│   └── docker-compose.yml
+├── docs/
+│   ├── README.md           # This file
+│   └── QUERIES.md          # Documentation for all SQL queries used
+└── src/
+    ├── api/
+    │   └── clickhouse.ts   # All ClickHouse query functions
+    ├── components/
+    │   ├── Dashboard.tsx
+    │   ├── ClusterTopology.tsx
+    │   ├── DistributedTables.tsx
+    │   ├── ReplicationStatus.tsx
+    │   ├── ZookeeperNodes.tsx
+    │   ├── MetricsPanel.tsx
+    │   ├── HelpDrawer.tsx
+    │   └── QueryDocs.tsx
+    ├── hooks/
+    │   ├── useClusterData.ts
+    │   ├── useMetricsHistory.ts
+    │   └── usePinnedTables.ts
+    └── types/
+        └── index.ts
 ```
 
 ---

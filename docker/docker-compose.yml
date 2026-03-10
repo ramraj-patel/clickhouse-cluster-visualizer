@@ -1,6 +1,8 @@
 services:
   cluster-visualizer:
-    build: .
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
     ports:
       - "3001:3001"
     environment:

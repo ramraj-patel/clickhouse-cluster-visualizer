@@ -1,5 +1,9 @@
-import { useState, useMemo } from 'react'
-import { RefreshCw, LogOut, Activity, Database, GitBranch, TreePine, BarChart3, AlertCircle, ChevronDown, BookOpen, HelpCircle } from 'lucide-react'
+import { useState, useMemo, useEffect } from 'react'
+import {
+  RefreshCw, LogOut, Activity, Database, GitBranch, TreePine,
+  BarChart3, AlertCircle, ChevronDown, BookOpen, HelpCircle,
+  FileText, HardDrive, Terminal, Wrench, HardDriveDownload,
+} from 'lucide-react'
 import { useClusterData } from '../hooks/useClusterData'
 import { ClusterTopology } from './ClusterTopology'
 import { DistributedTables } from './DistributedTables'
@@ -8,6 +12,11 @@ import { ZookeeperNodes } from './ZookeeperNodes'
 import { MetricsPanel } from './MetricsPanel'
 import { QueryDocs } from './QueryDocs'
 import { HelpDrawer } from './HelpDrawer'
+import { QueryLogViewer } from './QueryLogViewer'
+import { PartsInspector } from './PartsInspector'
+import { ProcessMonitor } from './ProcessMonitor'
+import { MutationsTracker } from './MutationsTracker'
+import { safeNum } from '../api/clickhouse'
 import type { ConnectionConfig, ActiveTab } from '../types'
 
 interface Props {
@@ -17,20 +26,40 @@ interface Props {
 }
 
 const TABS: { id: ActiveTab; label: string; icon: React.ReactNode }[] = [
-  { id: 'topology', label: 'Topology', icon: <GitBranch className="w-4 h-4" /> },
-  { id: 'tables', label: 'Tables', icon: <Database className="w-4 h-4" /> },
-  { id: 'replication', label: 'Replication', icon: <Activity className="w-4 h-4" /> },
-  { id: 'zookeeper', label: 'ZooKeeper', icon: <TreePine className="w-4 h-4" /> },
-  { id: 'metrics', label: 'Metrics', icon: <BarChart3 className="w-4 h-4" /> },
-  { id: 'docs', label: 'Query Docs', icon: <BookOpen className="w-4 h-4" /> },
+  { id: 'topology',    label: 'Topology',    icon: <GitBranch  className="w-4 h-4" /> },
+  { id: 'tables',      label: 'Tables',      icon: <Database   className="w-4 h-4" /> },
+  { id: 'replication', label: 'Replication', icon: <Activity   className="w-4 h-4" /> },
+  { id: 'zookeeper',   label: 'ZooKeeper',   icon: <TreePine   className="w-4 h-4" /> },
+  { id: 'metrics',     label: 'Metrics',     icon: <BarChart3  className="w-4 h-4" /> },
+  { id: 'query-log',   label: 'Query Log',   icon: <FileText   className="w-4 h-4" /> },
+  { id: 'parts',       label: 'Parts',       icon: <HardDrive  className="w-4 h-4" /> },
+  { id: 'processes',   label: 'Processes',   icon: <Terminal   className="w-4 h-4" /> },
+  { id: 'mutations',   label: 'Mutations',   icon: <Wrench     className="w-4 h-4" /> },
+  { id: 'docs',        label: 'Query Docs',  icon: <BookOpen   className="w-4 h-4" /> },
 ]
 
 export function Dashboard({ config, version, onDisconnect }: Props) {
-  const [tab, setTab] = useState<ActiveTab>('topology')
-  const [showHelp, setShowHelp] = useState(false)
+  const [tab, setTab]               = useState<ActiveTab>('topology')
+  const [showHelp, setShowHelp]     = useState(false)
   const [selectedDb, setSelectedDb] = useState<string>('__all__')
-  const { clusters, replicas, tables, replicationQueue, metrics, isLoading, error, refetchAll } =
-    useClusterData(config)
+  const [queryFilter, setQueryFilter] = useState<string | null>(null)
+
+  const {
+    clusters, replicas, tables, replicationQueue, metrics,
+    disks, serverErrors,
+    isLoading, error, refetchAll,
+  } = useClusterData(config)
+
+  // Clear query filter when navigating away from query-log tab
+  useEffect(() => {
+    if (tab !== 'query-log') setQueryFilter(null)
+  }, [tab])
+
+  // Direction A: Process Monitor → Query Log
+  function handleViewInLog(queryId: string) {
+    setQueryFilter(queryId)
+    setTab('query-log')
+  }
 
   const databases = useMemo(() => {
     const dbs = new Set<string>()
@@ -51,18 +80,28 @@ export function Dashboard({ config, version, onDisconnect }: Props) {
     () => selectedDb === '__all__' ? replicationQueue : replicationQueue.filter(q => q.database === selectedDb),
     [replicationQueue, selectedDb]
   )
-
-  // When a database is selected, narrow cluster nodes to hosts that have replicas for that db
   const scopedClusterNodes = useMemo(() => {
     if (selectedDb === '__all__') return clusters
     const hosts = new Set(filteredReplicas.map(r => r.replica_name))
     return clusters.filter(c => hosts.has(c.host_name))
   }, [clusters, filteredReplicas, selectedDb])
 
-  const clusterNames = [...new Set(scopedClusterNodes.map(c => c.cluster))]
-  const shardCount = [...new Set(scopedClusterNodes.map(c => `${c.cluster}:${c.shard_num}`))].length
-  const replicaCount = scopedClusterNodes.length
-  const unhealthy = filteredReplicas.filter(r => r.is_readonly === 1 || r.absolute_delay > 300).length
+  // Header stats
+  const clusterNames  = [...new Set(scopedClusterNodes.map(c => c.cluster))]
+  const shardCount    = [...new Set(scopedClusterNodes.map(c => `${c.cluster}:${c.shard_num}`))].length
+  const replicaCount  = scopedClusterNodes.length
+  const unhealthy     = filteredReplicas.filter(r => r.is_readonly === 1 || r.absolute_delay > 300).length
+  const activeJobs    = replicationQueue.filter(q => q.is_currently_executing).length
+
+  // Disk warning (any disk >85% full)
+  const diskWarning = disks.find(d => safeNum(d.used_fraction) > 0.85)
+  const diskDanger  = disks.find(d => safeNum(d.used_fraction) > 0.95)
+
+  // Server error count
+  const errorCount = serverErrors.reduce((s, e) => s + safeNum(e.value), 0)
+
+  // Mutation badge
+  const inFlightMutations = 0 // surfaced in MutationsTracker, no extra fetch here
 
   return (
     <div className="flex flex-col h-screen bg-ch-bg text-ch-text">
@@ -81,7 +120,7 @@ export function Dashboard({ config, version, onDisconnect }: Props) {
         </div>
 
         {/* Stats row */}
-        <div className="hidden md:flex items-center gap-6 text-xs">
+        <div className="hidden md:flex items-center gap-5 text-xs">
           <span className="text-ch-muted">
             Clusters: <span className="text-ch-text font-semibold">{clusterNames.length}</span>
           </span>
@@ -97,10 +136,26 @@ export function Dashboard({ config, version, onDisconnect }: Props) {
               {unhealthy} unhealthy
             </span>
           )}
-          {replicationQueue.filter(q => q.is_currently_executing).length > 0 && (
+          {activeJobs > 0 && (
             <span className="flex items-center gap-1 text-yellow-400">
               <Activity className="w-3.5 h-3.5" />
-              {replicationQueue.filter(q => q.is_currently_executing).length} replicating
+              {activeJobs} replicating
+            </span>
+          )}
+          {(diskDanger ?? diskWarning) && (
+            <span
+              className={`flex items-center gap-1 cursor-pointer ${diskDanger ? 'text-red-400' : 'text-yellow-400'}`}
+              onClick={() => setTab('parts')}
+              title={`${(diskDanger ?? diskWarning)!.name}: ${((safeNum((diskDanger ?? diskWarning)!.used_fraction)) * 100).toFixed(0)}% used`}
+            >
+              <HardDriveDownload className="w-3.5 h-3.5" />
+              disk {diskDanger ? 'critical' : 'warning'}
+            </span>
+          )}
+          {errorCount > 0 && (
+            <span className="flex items-center gap-1 text-orange-400" title={`${serverErrors.length} error type(s) — ${errorCount} total occurrences`}>
+              <AlertCircle className="w-3.5 h-3.5" />
+              {serverErrors.length} server error{serverErrors.length !== 1 ? 's' : ''}
             </span>
           )}
         </div>
@@ -140,12 +195,12 @@ export function Dashboard({ config, version, onDisconnect }: Props) {
       </header>
 
       {/* Tab bar */}
-      <div className="flex items-center gap-1 px-4 py-2 border-b border-ch-border bg-ch-surface/50 flex-shrink-0">
+      <div className="flex items-center gap-1 px-4 py-2 border-b border-ch-border bg-ch-surface/50 flex-shrink-0 overflow-x-auto">
         {TABS.map(t => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex-shrink-0 ${
               tab === t.id
                 ? 'bg-ch-accent/10 text-ch-accent border border-ch-accent/20'
                 : 'text-ch-muted hover:text-ch-text hover:bg-ch-surface'
@@ -153,7 +208,7 @@ export function Dashboard({ config, version, onDisconnect }: Props) {
           >
             {t.icon}
             {t.label}
-            {t.id === 'replication' && replicationQueue.filter(q => q.is_currently_executing).length > 0 && (
+            {t.id === 'replication' && activeJobs > 0 && (
               <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 ml-0.5" />
             )}
           </button>
@@ -161,7 +216,7 @@ export function Dashboard({ config, version, onDisconnect }: Props) {
         <button
           onClick={() => setShowHelp(v => !v)}
           title="About this view"
-          className={`ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+          className={`ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex-shrink-0 ${
             showHelp
               ? 'bg-ch-accent/10 text-ch-accent border border-ch-accent/20'
               : 'text-ch-muted hover:text-ch-text hover:bg-ch-surface'
@@ -192,15 +247,35 @@ export function Dashboard({ config, version, onDisconnect }: Props) {
                 Loading cluster topology…
               </div>
             ) : (
-              <ClusterTopology clusters={clusters} replicas={filteredReplicas} />
+              <ClusterTopology
+                clusters={scopedClusterNodes}
+                replicas={filteredReplicas}
+                tables={tables}
+                config={config}
+              />
             )}
           </div>
         )}
-        {tab === 'tables' && <DistributedTables tables={filteredTables} config={config} />}
+        {tab === 'tables'      && <DistributedTables tables={filteredTables} config={config} />}
         {tab === 'replication' && <ReplicationStatus replicas={filteredReplicas} queue={filteredQueue} />}
-        {tab === 'zookeeper' && <ZookeeperNodes config={config} replicas={filteredReplicas} />}
-        {tab === 'metrics' && <MetricsPanel config={config} />}
-        {tab === 'docs' && <QueryDocs />}
+        {tab === 'zookeeper'   && <ZookeeperNodes config={config} replicas={filteredReplicas} />}
+        {tab === 'metrics'     && <MetricsPanel config={config} />}
+        {tab === 'query-log'   && (
+          <QueryLogViewer
+            config={config}
+            filterQueryId={queryFilter}
+            onClearFilter={() => setQueryFilter(null)}
+          />
+        )}
+        {tab === 'parts'       && <PartsInspector config={config} />}
+        {tab === 'processes'   && (
+          <ProcessMonitor
+            config={config}
+            onViewInLog={handleViewInLog}
+          />
+        )}
+        {tab === 'mutations'   && <MutationsTracker config={config} />}
+        {tab === 'docs'        && <QueryDocs />}
       </main>
     </div>
   )

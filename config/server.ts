@@ -29,7 +29,7 @@ app.post('/api/query', async (req, res) => {
       params: { default_format: 'JSON' },
       auth: username ? { username, password: password ?? '' } : undefined,
       headers: { 'Content-Type': 'text/plain' },
-      timeout: 15000,
+      timeout: 30000,
     })
     res.json(response.data)
   } catch (err: unknown) {

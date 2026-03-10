@@ -426,13 +426,536 @@ OS-level and server-wide metrics sampled by a background thread every few second
 
 ---
 
+---
+
+## 10. Query Log
+
+**Functions:** `fetchQueryLog`, `fetchQueryLogFilterOptions`, `fetchQuerySubQueries`, `fetchQueryThreadDetail`, `fetchTableHotspots`, `fetchCrossShardBreakdown`
+**Source table:** `system.query_log`, `system.query_thread_log`
+**Used by:** Query Log tab
+**Proxy timeout:** 30 seconds (increased from default 15s)
+
+### 10a. Top-level queries
+
+```sql
+SELECT
+  query_id, initial_query_id, is_initial_query,
+  event_time,
+  query_duration_ms,
+  query, user, current_database,
+  read_rows, read_bytes, written_rows, result_rows, result_bytes,
+  memory_usage,
+  exception, exception_code, type, initial_user, interface, client_name,
+  databases, tables,
+  ProfileEvents['SelectedMarks']           AS marks_read,
+  ProfileEvents['SelectedRanges']          AS ranges_selected,
+  ProfileEvents['RealTimeMicroseconds']    AS real_time_us,
+  ProfileEvents['UserTimeMicroseconds']    AS user_time_us,
+  ProfileEvents['SystemTimeMicroseconds']  AS system_time_us,
+  ProfileEvents['ReadCompressedBytes']     AS read_compressed_bytes,
+  length(thread_ids)                       AS thread_count
+FROM system.query_log
+WHERE type IN ('QueryFinish', 'ExceptionBeforeStart', 'ExceptionWhileProcessing')
+  AND is_initial_query = 1
+  AND event_time >= now() - INTERVAL {intervalMinutes} MINUTE
+  AND query NOT ILIKE 'DESC %'
+  AND query NOT ILIKE 'DESCRIBE %'
+  -- optional: AND query NOT ILIKE '%exclude_pattern%'  (per excluded pattern)
+  -- optional: AND (current_database IN (...) OR arrayExists(t -> splitByChar('.', t)[1] IN (...), tables))
+  -- optional: AND arrayExists(t -> t IN (...), tables)
+  -- optional: AND query ILIKE '%search_term%'
+ORDER BY event_time DESC
+LIMIT {limit}
+```
+
+**Parameters:**
+- `intervalMinutes` — configurable: 5, 10, 15, 30, 60 (default), 360, 1440 minutes
+- `limit` — 100, 200 (default), or 500
+- Exclude patterns — per-pattern `AND query NOT ILIKE '%pattern%'` clauses
+- Database filter — `AND (current_database IN (...) OR arrayExists(t -> splitByChar('.', t)[1] IN (...), tables))`
+- Table filter — `AND arrayExists(t -> t IN (...), tables)`
+- Search — `AND query ILIKE '%term%'`
+
+**Purpose:**
+Retrieves completed queries for the selected time window. All filters are applied server-side in SQL. `is_initial_query = 1` restricts to top-level queries; distributed sub-queries appear in the Tier 1 panel. `type NOT 'QueryStart'` keeps only completed or failed entries.
+
+**Output columns:**
+
+| Column                 | Type     | Description                                                                   |
+|------------------------|----------|-------------------------------------------------------------------------------|
+| `query_id`             | String   | Unique query identifier                                                       |
+| `initial_query_id`     | String   | Parent query ID (same as `query_id` for top-level queries)                    |
+| `is_initial_query`     | UInt8    | `1` for top-level queries                                                     |
+| `event_time`           | DateTime | When the query completed                                                      |
+| `query_duration_ms`    | UInt64   | Wall-clock query duration in milliseconds                                     |
+| `query`                | String   | Full query text (may be truncated at 64 KB)                                   |
+| `user`                 | String   | ClickHouse user who ran the query                                             |
+| `current_database`     | String   | Default database at query time                                                |
+| `read_rows`            | UInt64   | Total rows read from storage                                                  |
+| `read_bytes`           | UInt64   | Total uncompressed bytes read                                                 |
+| `memory_usage`         | Int64    | Peak memory used by this query                                                |
+| `type`                 | Enum     | `QueryFinish`, `ExceptionBeforeStart`, or `ExceptionWhileProcessing`          |
+| `exception`            | String   | Error message (empty for successful queries)                                  |
+| `exception_code`       | Int32    | ClickHouse error code (0 for success)                                         |
+| `databases`            | Array    | Databases accessed                                                            |
+| `tables`               | Array    | Tables accessed (as `db.table` strings)                                       |
+| `client_name`          | String   | Client application name                                                       |
+| `marks_read`           | UInt64   | Index marks scanned — proxy for sparse index efficiency                       |
+| `real_time_us`         | UInt64   | Wall-clock microseconds (from ProfileEvents)                                  |
+| `user_time_us`         | UInt64   | User-space CPU microseconds                                                   |
+| `system_time_us`       | UInt64   | Kernel-space CPU microseconds                                                 |
+| `thread_count`         | UInt64   | Number of threads used (`length(thread_ids)`)                                 |
+
+---
+
+### 10b. Filter options (databases & tables)
+
+**Function:** `fetchQueryLogFilterOptions`
+
+```sql
+-- Databases (union current_database + DB prefix from tables array)
+SELECT DISTINCT v FROM (
+  SELECT current_database AS v
+  FROM system.query_log
+  WHERE event_time >= now() - INTERVAL {intervalMinutes} MINUTE
+    AND type IN ('QueryFinish', 'ExceptionBeforeStart', 'ExceptionWhileProcessing')
+    AND is_initial_query = 1
+    AND current_database != ''
+  UNION ALL
+  SELECT arrayJoin(arrayMap(t -> splitByChar('.', t)[1], tables)) AS v
+  FROM system.query_log
+  WHERE event_time >= now() - INTERVAL {intervalMinutes} MINUTE
+    AND type IN ('QueryFinish', 'ExceptionBeforeStart', 'ExceptionWhileProcessing')
+    AND is_initial_query = 1
+    AND notEmpty(tables)
+) WHERE v != ''
+ORDER BY v LIMIT 300;
+
+-- Tables
+SELECT DISTINCT arrayJoin(tables) AS v
+FROM system.query_log
+WHERE event_time >= now() - INTERVAL {intervalMinutes} MINUTE
+  AND type IN ('QueryFinish', 'ExceptionBeforeStart', 'ExceptionWhileProcessing')
+  AND is_initial_query = 1
+  AND notEmpty(tables)
+ORDER BY v LIMIT 500
+```
+
+**Purpose:**
+Populates the Database and Table multiselect dropdowns. Both use the same time window as the main query. Databases include both `current_database` (the session default) and the DB prefix extracted from `tables` entries (e.g. `system` from `system.query_log`) — this ensures databases like `system` appear even when `current_database = 'default'`.
+
+---
+
+### 10c. Sub-queries (Tier 1)
+
+**Function:** `fetchQuerySubQueries`
+
+```sql
+SELECT
+  query_id, initial_query_id, is_initial_query,
+  event_time, query_duration_ms, query, user, current_database,
+  read_rows, read_bytes, 0 AS written_rows, result_rows, 0 AS result_bytes,
+  memory_usage, exception, 0 AS exception_code,
+  type, '' AS initial_user, '' AS interface, '' AS client_name,
+  ProfileEvents['SelectedMarks']           AS marks_read,
+  0 AS ranges_selected,
+  ProfileEvents['RealTimeMicroseconds']    AS real_time_us,
+  ProfileEvents['UserTimeMicroseconds']    AS user_time_us,
+  ProfileEvents['SystemTimeMicroseconds']  AS system_time_us,
+  0 AS read_compressed_bytes,
+  length(thread_ids)                       AS thread_count
+FROM system.query_log
+WHERE initial_query_id = '<query_id>'
+  AND is_initial_query = 0
+ORDER BY event_time ASC
+```
+
+**Purpose:**
+For a distributed query, ClickHouse fans out sub-queries to remote shards. This query fetches those sub-queries by `initial_query_id`. Sub-queries have `is_initial_query = 0`. Loaded automatically when the user expands a query detail panel.
+
+---
+
+### 10d. Thread detail (Tier 2)
+
+**Function:** `fetchQueryThreadDetail`
+**Requires:** `log_query_threads = 1` in `config.xml` or `users.xml`
+
+```sql
+SELECT
+  thread_name, thread_id,
+  read_rows, read_bytes, memory_usage,
+  ProfileEvents['RealTimeMicroseconds']   AS real_us,
+  ProfileEvents['UserTimeMicroseconds']   AS user_us,
+  ProfileEvents['SystemTimeMicroseconds'] AS sys_us,
+  ProfileEvents['SelectedMarks']          AS marks_read
+FROM system.query_thread_log
+WHERE query_id = '<query_id>'
+ORDER BY real_us DESC
+```
+
+**Purpose:**
+Per-thread breakdown for a single query. Reveals thread imbalance and parallelism efficiency. Requires `log_query_threads = 1` — without this setting `system.query_thread_log` is not populated and the panel shows an explanatory empty state.
+
+**Output columns:**
+
+| Column        | Type   | Description                                         |
+|---------------|--------|-----------------------------------------------------|
+| `thread_name` | String | Thread name (e.g. `QueryPipeline`, `MergeThread`)  |
+| `thread_id`   | UInt64 | OS thread ID                                        |
+| `real_us`     | UInt64 | Wall-clock microseconds for this thread             |
+| `user_us`     | UInt64 | User-space CPU microseconds                         |
+| `sys_us`      | UInt64 | Kernel-space CPU microseconds                       |
+| `marks_read`  | UInt64 | Index marks scanned by this thread                  |
+| `read_rows`   | UInt64 | Rows read by this thread                            |
+| `memory_usage`| Int64  | Memory used by this thread                          |
+
+---
+
+### 10e. Table hotspots
+
+**Function:** `fetchTableHotspots`
+
+```sql
+SELECT
+  arrayJoin(tables)      AS table_name,
+  count()                AS query_count,
+  sum(query_duration_ms) AS total_duration_ms,
+  sum(read_rows)         AS total_rows_read,
+  sum(read_bytes)        AS total_bytes_read
+FROM system.query_log
+WHERE event_time >= now() - INTERVAL 1 HOUR
+  AND is_initial_query = 1
+  AND type = 'QueryFinish'
+  AND notEmpty(tables)
+GROUP BY table_name
+ORDER BY query_count DESC
+LIMIT 20
+```
+
+**Purpose:**
+Aggregates the last hour of query activity by table. `arrayJoin(tables)` expands multi-table queries so each table gets individual credit. Shows which tables absorb the most cumulative I/O — useful for identifying candidates for materialised views, better indexes, or pre-aggregation.
+
+**Output columns:**
+
+| Column              | Type   | Description                                       |
+|---------------------|--------|---------------------------------------------------|
+| `table_name`        | String | Fully qualified table name (e.g. `db.table`)      |
+| `query_count`       | UInt64 | Number of queries that touched this table         |
+| `total_duration_ms` | UInt64 | Cumulative query duration in milliseconds         |
+| `total_rows_read`   | UInt64 | Cumulative rows read from this table              |
+| `total_bytes_read`  | UInt64 | Cumulative bytes read from this table             |
+
+---
+
+### 10f. Cross-shard breakdown (Tier 3, opt-in)
+
+**Function:** `fetchCrossShardBreakdown`
+
+```sql
+SELECT
+  _shard_num,
+  hostname()                              AS host,
+  query_id,
+  query_duration_ms,
+  read_rows, read_bytes, memory_usage,
+  ProfileEvents['SelectedMarks']          AS marks_read,
+  ProfileEvents['RealTimeMicroseconds']   AS real_us,
+  ProfileEvents['UserTimeMicroseconds']   AS user_us,
+  length(thread_ids)                      AS thread_count
+FROM clusterAllReplicas('<cluster_name>', system.query_log)
+WHERE initial_query_id = '<query_id>'
+ORDER BY _shard_num
+```
+
+**Purpose:**
+Gathers `query_log` entries from **all replicas in a named cluster** for a specific `initial_query_id`. Allows comparison of per-shard load, duration, and memory for a distributed query. Expensive — fans out to every node — and is opt-in. The user selects a cluster from a dropdown (populated via `fetchClusters`) and clicks "Load all shards". Proxy timeout is 30s.
+
+**Output columns:**
+
+| Column              | Type   | Description                                                  |
+|---------------------|--------|--------------------------------------------------------------|
+| `_shard_num`        | UInt32 | Shard number (injected by `clusterAllReplicas`)              |
+| `host`              | String | Hostname of the node where this log entry was recorded       |
+| `query_id`          | String | The sub-query ID on this shard                               |
+| `query_duration_ms` | UInt64 | Duration on this shard in milliseconds                       |
+| `read_rows`         | UInt64 | Rows read on this shard                                      |
+| `read_bytes`        | UInt64 | Bytes read on this shard                                     |
+| `memory_usage`      | Int64  | Peak memory on this shard                                    |
+| `marks_read`        | UInt64 | Index marks scanned on this shard                            |
+| `real_us`           | UInt64 | Wall-clock microseconds on this shard                        |
+| `thread_count`      | UInt64 | Threads used on this shard                                   |
+
+---
+
+## 11. Parts Inspector
+
+**Functions:** `fetchPartsSummary`, `fetchPartsForTable`, `fetchActiveMerges`, `fetchPartLog`
+**Source tables:** `system.parts`, `system.merges`, `system.part_log`
+**Used by:** Parts tab
+
+### 11a. Parts summary (always-fetched)
+
+```sql
+SELECT
+  database, table,
+  count()                       AS total_parts,
+  countIf(active)               AS active_parts,
+  sum(bytes_on_disk)            AS compressed_bytes,
+  sum(data_uncompressed_bytes)  AS uncompressed_bytes,
+  sum(rows)                     AS total_rows,
+  max(refcount)                 AS max_refcount,
+  max(modification_time)        AS last_modified,
+  countIf(NOT active)           AS inactive_parts
+FROM system.parts
+GROUP BY database, table
+ORDER BY compressed_bytes DESC
+```
+
+**Purpose:**
+Aggregated summary per table — always fetched on tab load. Returns a single row per table regardless of partition count, avoiding JSON serialisation of potentially millions of part rows.
+
+**Output columns:**
+
+| Column              | Type     | Description                                                       |
+|---------------------|----------|-------------------------------------------------------------------|
+| `total_parts`       | UInt64   | All parts (active + inactive)                                     |
+| `active_parts`      | UInt64   | Currently visible parts (used by queries)                         |
+| `compressed_bytes`  | UInt64   | On-disk compressed size (`bytes_on_disk`)                         |
+| `uncompressed_bytes`| UInt64   | Uncompressed logical size (`data_uncompressed_bytes`)             |
+| `total_rows`        | UInt64   | Total row count across all active parts                           |
+| `max_refcount`      | UInt32   | Highest reference count — elevated when parts are in snapshots    |
+| `inactive_parts`    | UInt64   | Parts awaiting GC after merge (should drop to 0 quickly)          |
+
+**Health thresholds:**
+- `avg_parts_per_partition > 100` → warn; `> 300` → danger
+- `unmerged_parts > 50` → warn; `> 150` → danger
+- `compression_ratio < 2` → warn (uncompressed/compressed)
+- `max_refcount > 1` → info
+
+---
+
+### 11b. Parts detail (lazy, per table)
+
+```sql
+SELECT
+  partition, name, active, rows,
+  bytes_on_disk, data_uncompressed_bytes,
+  refcount, modification_time, min_date, max_date,
+  min_block_number, max_block_number, level
+FROM system.parts
+WHERE database = '<db>' AND table = '<table>'
+ORDER BY partition, min_block_number
+LIMIT 5000
+```
+
+**Purpose:**
+Per-partition and per-part detail, loaded lazily when the user drills into a specific table. Capped at 5000 rows to prevent UI freezes on tables with many partitions.
+
+---
+
+### 11c. Active merges
+
+```sql
+SELECT
+  database, table, partition, result_part_name,
+  elapsed, progress, num_parts,
+  rows_read, rows_written,
+  total_size_bytes_compressed, memory_usage
+FROM system.merges
+ORDER BY elapsed DESC
+```
+
+**Purpose:**
+Real-time snapshot of currently executing merge operations. Polled every 15 seconds. Shows progress (0–1 fraction), elapsed time, and memory consumption per merge.
+
+**Output columns:**
+
+| Column                       | Type    | Description                                          |
+|------------------------------|---------|------------------------------------------------------|
+| `progress`                   | Float64 | Completion fraction 0.0–1.0                          |
+| `elapsed`                    | Float64 | Seconds since merge started                          |
+| `num_parts`                  | UInt64  | Number of source parts being merged                  |
+| `total_size_bytes_compressed`| UInt64  | Total compressed size of source parts                |
+| `memory_usage`               | UInt64  | Current memory used by this merge                    |
+
+---
+
+### 11d. Part event history
+
+```sql
+SELECT
+  event_type, event_time, database, table, partition_id,
+  part_name, rows, size_in_bytes, duration_ms, error
+FROM system.part_log
+WHERE database = '<db>' AND table = '<table>'
+ORDER BY event_time DESC
+LIMIT 200
+```
+
+**Purpose:**
+Historical log of part lifecycle events: `NewPart` (insert), `MergeParts` (merge complete), `RemovePart` (GC), `MutatePart` (mutation). Useful for diagnosing why part counts spiked or whether merges are completing successfully. Loaded on demand per table.
+
+---
+
+## 12. Process Monitor
+
+**Function:** `fetchProcesses`
+**Source table:** `system.processes`
+**Used by:** Processes tab
+**Refresh interval:** 5 seconds / stale time: 4 seconds
+
+```sql
+SELECT
+  query_id, user, client_hostname, elapsed,
+  read_rows, read_bytes, total_rows_approx,
+  written_rows, memory_usage, peak_memory_usage,
+  query, is_cancelled, thread_ids,
+  ProfileEvents, Settings
+FROM system.processes
+ORDER BY elapsed DESC
+```
+
+**Purpose:**
+Live view of all queries currently executing on this node. Every poll returns a fresh snapshot — rows not present in the current result have already completed. The UI self-filters any process whose `query` text contains `system.processes` to hide the monitoring query itself.
+
+**Output columns:**
+
+| Column              | Type     | Description                                              |
+|---------------------|----------|----------------------------------------------------------|
+| `query_id`          | String   | Unique query identifier (links to Query Log)             |
+| `user`              | String   | ClickHouse user running the query                        |
+| `client_hostname`   | String   | Hostname of the client application                       |
+| `elapsed`           | Float64  | Seconds since query started                              |
+| `read_rows`         | UInt64   | Rows read so far                                         |
+| `read_bytes`        | UInt64   | Bytes read so far                                        |
+| `total_rows_approx` | UInt64   | Estimated total rows (0 if unknown — indeterminate bar)  |
+| `written_rows`      | UInt64   | Rows written (for INSERT queries)                        |
+| `memory_usage`      | Int64    | Current memory (bytes)                                   |
+| `peak_memory_usage` | Int64    | Peak memory since query started                          |
+| `is_cancelled`      | UInt8    | `1` if the query received a cancel signal                |
+| `thread_ids`        | Array    | OS thread IDs assigned to this query                     |
+
+**Cross-linking:** The "View in Log" button in the Process Monitor card sets `filterQueryId` in the Dashboard state and navigates to the Query Log tab, which pre-filters by that `query_id`.
+
+---
+
+## 13. Mutations Tracker
+
+**Function:** `fetchMutations`
+**Source table:** `system.mutations`
+**Used by:** Mutations tab
+**Refresh interval:** 30 seconds / stale time: 15 seconds
+
+```sql
+SELECT
+  database, table, mutation_id, command,
+  create_time, block_numbers.partition_id,
+  parts_to_do_names, parts_to_do,
+  is_done, latest_failed_part,
+  latest_fail_time, latest_fail_reason
+FROM system.mutations
+ORDER BY create_time DESC
+LIMIT 200
+```
+
+**Purpose:**
+Shows all mutations (ALTER UPDATE, ALTER DELETE, MATERIALIZE INDEX, MATERIALIZE PROJECTION) on the current node. Mutations run asynchronously part-by-part — `parts_to_do` counts remaining parts. `is_done = 1` with `parts_to_do = 0` means the mutation has completed. Failed mutations (non-empty `latest_fail_reason`) stall all subsequent mutations on that table until manually investigated.
+
+**Output columns:**
+
+| Column                  | Type     | Description                                                              |
+|-------------------------|----------|--------------------------------------------------------------------------|
+| `mutation_id`           | String   | Unique mutation identifier (e.g. `mutation_42`)                          |
+| `command`               | String   | The ALTER command that triggered this mutation                           |
+| `create_time`           | DateTime | When the mutation was submitted                                          |
+| `parts_to_do`           | Int64    | Parts still needing mutation (0 = done)                                  |
+| `parts_to_do_names`     | Array    | Names of parts not yet mutated (useful for stuck diagnosis)              |
+| `is_done`               | UInt8    | `1` if the mutation has finished on this replica                         |
+| `latest_failed_part`    | String   | Name of the part that last caused a failure                              |
+| `latest_fail_time`      | DateTime | Timestamp of the last failure                                            |
+| `latest_fail_reason`    | String   | Error message from the last failure (empty when healthy)                 |
+
+---
+
+## 14. Disk Health
+
+**Function:** `fetchDiskHealth`
+**Source table:** `system.disks`
+**Used by:** Dashboard header (disk warning badge), Parts tab
+**Refresh interval:** 30 seconds
+
+```sql
+SELECT
+  name, path, type,
+  free_space, total_space, used_fraction,
+  keep_free_space
+FROM system.disks
+ORDER BY used_fraction DESC
+```
+
+**Purpose:**
+Returns all configured storage volumes (default disk, additional volumes for tiered storage, S3 disks). `used_fraction` is the primary health signal — values above 0.85 trigger a warning badge in the header; above 0.95 triggers a critical (red) badge.
+
+**Output columns:**
+
+| Column           | Type    | Description                                             |
+|------------------|---------|---------------------------------------------------------|
+| `name`           | String  | Disk/volume name as configured                          |
+| `path`           | String  | Filesystem path                                         |
+| `type`           | String  | `local`, `s3`, `hdfs`, `azure_blob_storage`, etc.       |
+| `free_space`     | UInt64  | Available bytes                                         |
+| `total_space`    | UInt64  | Total capacity bytes                                    |
+| `used_fraction`  | Float64 | `1 - (free_space / total_space)` — 0.0 to 1.0          |
+| `keep_free_space`| UInt64  | Reserved bytes (ClickHouse will not fill below this)    |
+
+---
+
+## 15. Server Errors
+
+**Function:** `fetchServerErrors`
+**Source table:** `system.errors`
+**Used by:** Dashboard header (error count badge)
+**Refresh interval:** 30 seconds
+
+```sql
+SELECT
+  name, code, value, last_error_time, last_error_message
+FROM system.errors
+WHERE value > 0
+ORDER BY value DESC
+LIMIT 50
+```
+
+**Purpose:**
+Returns error types that have occurred at least once since server start, ordered by frequency. The dashboard header shows the count of distinct error types and total occurrences. Clicking the badge is informational — errors should be investigated in the Query Log for specific failing queries.
+
+**Output columns:**
+
+| Column               | Type     | Description                                              |
+|----------------------|----------|----------------------------------------------------------|
+| `name`               | String   | Error name (e.g. `MEMORY_LIMIT_EXCEEDED`)                |
+| `code`               | Int32    | ClickHouse error code                                    |
+| `value`              | UInt64   | Total occurrences since server start                     |
+| `last_error_time`    | DateTime | Timestamp of the most recent occurrence                  |
+| `last_error_message` | String   | Full error message from the last occurrence              |
+
+---
+
 ## Refresh Behaviour
 
 | Query group                                     | Interval   | Stale time | Notes |
 |-------------------------------------------------|------------|------------|-------|
 | Cluster, Replicas, Tables, Replication Queue    | 30 seconds | 10 seconds | Driven by `useClusterData` |
+| Disk health, Server errors                      | 30 seconds | 10 seconds | Driven by `useClusterData`; header badge signals |
+| Active merges (Parts tab)                       | 15 seconds | 10 seconds | Driven by `useActiveMerges` |
+| Parts summary (Parts tab)                       | 60 seconds | 30 seconds | Driven by `usePartsSummary`; aggregated GROUP BY only |
 | Metrics (queries 7–9: metrics, events, async)   | 15 seconds | 14 seconds | Driven by `useMetricsHistory`; can be paused via the Pause button |
+| Process Monitor                                 | 5 seconds  | 4 seconds  | Driven by `useProcesses`; live in-flight queries |
+| Mutations Tracker                               | 30 seconds | 15 seconds | Driven by `useMutations` |
+| Query Log                                       | On demand / optional auto-refresh | 30s | Auto-refresh disabled by default; user can enable with configurable interval |
 | ZooKeeper connections (`system.zookeeper_connection`) | 30 seconds | 15 seconds | Stops retrying on 404 (ClickHouse < 22.6) |
 | ZooKeeper tree nodes (`system.zookeeper`)       | On demand  | 30 seconds | One query per node expansion; not auto-polled |
+
+**Proxy timeout:** Increased from 15s to 30s in `config/server.ts` to accommodate Query Log queries and the opt-in `clusterAllReplicas()` cross-shard fetch.
 
 The ZooKeeper tree is not auto-polled since each node expansion is a separate live read against ZooKeeper. If `system.zookeeper_connection` returns 404 (requires ClickHouse 22.6+), the panel shows a graceful error and stops retrying.

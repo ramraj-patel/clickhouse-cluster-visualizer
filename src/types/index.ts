@@ -174,4 +174,203 @@ export interface ReplicaView {
   replicaInfo?: ReplicaInfo[]
 }
 
-export type ActiveTab = 'topology' | 'tables' | 'replication' | 'zookeeper' | 'metrics' | 'docs'
+export type ActiveTab =
+  | 'topology' | 'tables' | 'replication' | 'zookeeper' | 'metrics'
+  | 'query-log' | 'parts' | 'processes' | 'mutations'
+  | 'docs'
+
+// ── system.query_log ─────────────────────────────────────────────────────────
+
+export interface QueryLogRow {
+  query_id: string
+  initial_query_id: string
+  is_initial_query: number
+  event_time: string
+  query_duration_ms: number
+  query: string
+  user: string
+  current_database: string
+  read_rows: number
+  read_bytes: number
+  written_rows: number
+  result_rows: number
+  result_bytes: number
+  memory_usage: number          // peak memory at query completion (no separate peak_memory_usage in query_log)
+  exception: string
+  exception_code: number
+  type: string
+  initial_user: string
+  interface: string
+  client_name: string
+  databases: string[]
+  tables: string[]
+  // ProfileEvents columns
+  marks_read: number
+  ranges_selected: number
+  real_time_us: number
+  user_time_us: number
+  system_time_us: number
+  read_compressed_bytes: number
+  thread_count: number
+}
+
+// system.query_thread_log
+export interface QueryThreadRow {
+  thread_name: string
+  thread_id: number
+  read_rows: number
+  read_bytes: number
+  memory_usage: number
+  real_us: number
+  user_us: number
+  sys_us: number
+  marks_read: number
+}
+
+// system.query_log — arrayJoin(tables) hotspot aggregation
+export interface TableHotspotRow {
+  table_name: string
+  query_count: number
+  total_duration_ms: number
+  total_rows_read: number
+  total_bytes_read: number
+}
+
+// clusterAllReplicas cross-shard breakdown
+export interface CrossShardRow {
+  _shard_num: number
+  host: string
+  query_id: string
+  query_duration_ms: number
+  read_rows: number
+  read_bytes: number
+  memory_usage: number
+  marks_read: number
+  real_us: number
+  user_us: number
+  thread_count: number
+}
+
+// ── system.parts ──────────────────────────────────────────────────────────────
+
+export interface PartSummaryRow {
+  database: string
+  table: string
+  part_count: number
+  unmerged_parts: number
+  total_rows: number
+  total_bytes: number
+  total_uncompressed: number
+  compression_ratio: number
+  max_level: number
+  last_modified: string
+  partition_count: number
+  max_refcount: number
+  avg_parts_per_partition: number
+}
+
+export interface PartDetailRow {
+  partition: string
+  partition_id: string
+  name: string
+  part_type: string
+  rows: number
+  bytes_on_disk: number
+  data_uncompressed_bytes: number
+  marks_bytes: number
+  modification_time: string
+  level: number
+  disk_name: string
+  refcount: number
+  min_block_number: number
+  max_block_number: number
+}
+
+// system.merges
+export interface ActiveMergeRow {
+  database: string
+  table: string
+  elapsed: number
+  progress: number
+  num_parts: number
+  rows_read: number
+  rows_written: number
+  bytes_read_uncompressed: number
+  bytes_written_uncompressed: number
+  memory_usage: number
+  is_mutation: number
+  merge_type: string
+  merge_algorithm: string
+}
+
+// system.part_log
+export interface PartLogRow {
+  event_time: string
+  event_type: string
+  part_name: string
+  merged_from: string[]
+  duration_ms: number
+  rows: number
+  size_in_bytes: number
+  peak_memory_usage: number
+}
+
+// ── system.processes ──────────────────────────────────────────────────────────
+
+export interface ProcessRow {
+  query_id: string
+  initial_query_id: string
+  is_initial_query: number
+  user: string
+  client_name: string
+  elapsed: number
+  read_rows: number
+  read_bytes: number
+  written_rows: number
+  total_rows_approx: number
+  memory_usage: number
+  peak_memory_usage: number
+  query: string
+  is_cancelled: number
+  query_kind: string
+  progress_fraction: number
+}
+
+// ── system.mutations ──────────────────────────────────────────────────────────
+
+export interface MutationRow {
+  database: string
+  table: string
+  mutation_id: string
+  command: string
+  create_time: string
+  parts_to_do: number
+  parts_to_do_names: string[]
+  is_done: number
+  latest_failed_part: string
+  latest_fail_time: string
+  latest_fail_reason: string
+}
+
+// ── system.disks ──────────────────────────────────────────────────────────────
+
+export interface DiskRow {
+  name: string
+  path: string
+  type: string
+  free_space: number
+  total_space: number
+  used_fraction: number
+  keep_free_space: number
+}
+
+// ── system.errors ─────────────────────────────────────────────────────────────
+
+export interface ServerErrorRow {
+  code: number
+  name: string
+  value: number
+  last_error_time: string
+  last_error_message: string
+  remote: number
+}

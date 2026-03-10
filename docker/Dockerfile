@@ -23,7 +23,7 @@ RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
 
 # Copy proxy server source
-COPY server.ts ./
+COPY config/server.ts ./server.ts
 COPY tsconfig.json ./
 
 # tsx is needed to run server.ts directly (it's a devDep, install it explicitly)

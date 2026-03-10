@@ -155,8 +155,9 @@ cluster-visualizer/
 ├── vite.config.ts          # Vite config — proxies /api to :3001 in dev
 ├── package.json
 ├── tsconfig.json
+├── CONTEXT.md              # Authoritative architecture reference
 ├── config/
-│   ├── server.ts           # Express proxy server (Node.js)
+│   ├── server.ts           # Express proxy server (Node.js, 30s timeout)
 │   ├── postcss.config.js   # PostCSS config (Tailwind + Autoprefixer)
 │   └── tailwind.config.js  # Tailwind theme and content paths
 ├── docker/
@@ -175,12 +176,22 @@ cluster-visualizer/
     │   ├── ReplicationStatus.tsx
     │   ├── ZookeeperNodes.tsx
     │   ├── MetricsPanel.tsx
+    │   ├── QueryLogViewer.tsx
+    │   ├── PartsInspector.tsx
+    │   ├── ProcessMonitor.tsx
+    │   ├── MutationsTracker.tsx
     │   ├── HelpDrawer.tsx
     │   └── QueryDocs.tsx
     ├── hooks/
     │   ├── useClusterData.ts
     │   ├── useMetricsHistory.ts
+    │   ├── useQueryLog.ts
+    │   ├── useProcesses.ts
+    │   ├── usePartsData.ts
+    │   ├── useMutations.ts
     │   └── usePinnedTables.ts
+    ├── utils/
+    │   └── format.ts       # fmtBytes, fmtDuration, fmtRows, fmtMarks, fmtAge
     └── types/
         └── index.ts
 ```
@@ -320,6 +331,57 @@ Click 📋 on a cluster header to copy the full cluster detail as JSON — inclu
 
 ---
 
+### Query Log
+`system.query_log` — historical query analysis. Pull-based; auto-refresh optional.
+
+- **Configurable time window** — 5 min, 10 min, 15 min, 30 min, 1 h, 6 h, 24 h
+- **Row limit** — 100 / 200 / 500 rows
+- **Server-side filters** — database multiselect, table multiselect, query text search (all applied in SQL before results reach the browser)
+- **Exclude patterns** — persistent per-pattern `NOT ILIKE` exclusions (saved in `localStorage`)
+- **Auto-refresh toggle** — disabled by default; enable for a rolling live view
+- **Grid** — sortable columns (Query, Tables, Time, Duration), resizable column widths by dragging headers, full timestamps, zebra striping
+- **Query detail panel** — click any row to expand:
+  - Formatted SQL (ClickHouse dialect) with Raw / Formatted toggle and copy button
+  - Profile stats: duration, rows/bytes read, memory, marks read, thread count, CPU time
+  - **Sub-queries (Tier 1)** — distributed fan-out queries by `initial_query_id`
+  - **Thread detail (Tier 2)** — per-thread CPU, memory, marks from `system.query_thread_log` (requires `log_query_threads = 1`)
+  - **Cross-shard breakdown (Tier 3)** — per-shard stats via `clusterAllReplicas()`, opt-in with cluster selector
+- **Hotspots view** — aggregates last hour by table: query count, total duration, rows/bytes read
+- **"View in Log" from Process Monitor** — direct `query_id` lookup with no time restriction; polls every 5 s until the query completes and appears in the log
+
+---
+
+### Process Monitor
+`system.processes` — live view of in-flight queries, refreshed every 5 seconds.
+
+- **Pause / Resume** — freezes the snapshot so you can inspect without the list jumping
+- Progress bars (determinate when `total_rows_approx > 0`, pulsing otherwise)
+- Memory usage with peak, rows read, elapsed time with colour thresholds (>60 s amber, >300 s red)
+- Sub-query badge for distributed fan-out queries
+- **"View in Log"** button — navigates to Query Log tab and looks up the query once it completes
+
+---
+
+### Parts Inspector
+`system.parts` + `system.merges` + `system.part_log`.
+
+- **Table summary** — one row per table: part count, unmerged parts, total/uncompressed bytes, compression ratio, max level, avg parts per partition; colour-coded health thresholds
+- **Active merges banner** — live merge progress bars with elapsed time and memory usage (15 s refresh)
+- **Partition drill-down** — lazy-loaded per-partition and per-part detail (up to 5 000 rows)
+- **Part event history** — `system.part_log` events (`NewPart`, `MergeParts`, `RemovePart`, `MutatePart`) per table
+
+---
+
+### Mutations Tracker
+`system.mutations` — ALTER mutations on ReplicatedMergeTree tables (30 s refresh).
+
+- In-progress mutations with `parts_to_do` countdown
+- Failed mutations highlighted in red with the exact `latest_fail_reason` error
+- `parts_to_do_names` list for diagnosing which partitions are stuck
+- Completed mutations shown in muted style
+
+---
+
 ### About drawer
 Click the **About** button (top-right of the tab bar) on any tab to open a contextual help drawer. For each tab it shows:
 - What the view is and where the data comes from
@@ -357,6 +419,19 @@ lsof -ti:5173 | xargs kill
 **Metrics page shows "—" for all values**
 Some async metrics from ClickHouse come back as strings (`"NaN"`, `"Inf"`). The dashboard handles these gracefully and displays `—`. This is not an error.
 
+**Query Log — Thread detail shows "No thread data"**
+Thread logging is disabled by default. Add to your `users.xml` or `config.xml`:
+```xml
+<log_query_threads>1</log_query_threads>
+```
+Without this, `system.query_thread_log` is not populated.
+
+**Query Log — database dropdown missing "system"**
+Queries like `SELECT … FROM system.foo` record `current_database = 'default'`, not `system`. The dashboard extracts database names from the `tables` array (e.g. `system.query_log → system`) in addition to `current_database`, so `system` will appear once any query that touches a `system.*` table is in the log window.
+
+**"View in Log" from Process Monitor shows nothing**
+The query is still running — `system.query_log` is only written after a query completes. The Query Log tab polls every 5 seconds and will show the entry automatically once it finishes.
+
 ---
 
 ## ClickHouse version compatibility
@@ -366,3 +441,6 @@ Some async metrics from ClickHouse come back as strings (`"NaN"`, `"Inf"`). The 
 | Core dashboard (Topology, Tables, Replication, Metrics) | 21.x+ |
 | ZooKeeper connection panel (`system.zookeeper_connection`) | 22.6+ |
 | ZooKeeper path explorer (`system.zookeeper`) | 21.x+ (requires ZK configured) |
+| Query Log, Parts Inspector, Process Monitor, Mutations | 21.x+ |
+| Thread detail (`system.query_thread_log`) | 21.x+ (requires `log_query_threads = 1`) |
+| Cross-shard breakdown (`clusterAllReplicas`) | 20.6+ |

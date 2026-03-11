@@ -175,7 +175,7 @@ export interface ReplicaView {
 }
 
 export type ActiveTab =
-  | 'topology' | 'tables' | 'replication' | 'zookeeper' | 'metrics'
+  | 'topology' | 'tables' | 'replication' | 'zookeeper' | 'health'
   | 'query-log' | 'parts' | 'processes' | 'mutations'
   | 'docs'
 
@@ -362,6 +362,18 @@ export interface DiskRow {
   total_space: number
   used_fraction: number
   keep_free_space: number
+}
+
+// ── clusterAllReplicas per-shard live metrics ─────────────────────────────────
+
+export interface ShardMetricRow {
+  _shard_num: number
+  host: string
+  active_queries: number
+  active_merges: number
+  query_memory: number
+  delayed_inserts: number
+  tcp_conns: number
 }
 
 // ── system.errors ─────────────────────────────────────────────────────────────

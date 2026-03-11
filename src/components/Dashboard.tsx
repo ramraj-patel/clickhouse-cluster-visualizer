@@ -9,7 +9,7 @@ import { ClusterTopology } from './ClusterTopology'
 import { DistributedTables } from './DistributedTables'
 import { ReplicationStatus } from './ReplicationStatus'
 import { ZookeeperNodes } from './ZookeeperNodes'
-import { MetricsPanel } from './MetricsPanel'
+import { HealthDashboard } from './HealthDashboard'
 import { QueryDocs } from './QueryDocs'
 import { HelpDrawer } from './HelpDrawer'
 import { QueryLogViewer } from './QueryLogViewer'
@@ -30,7 +30,7 @@ const TABS: { id: ActiveTab; label: string; icon: React.ReactNode }[] = [
   { id: 'tables',      label: 'Tables',      icon: <Database   className="w-4 h-4" /> },
   { id: 'replication', label: 'Replication', icon: <Activity   className="w-4 h-4" /> },
   { id: 'zookeeper',   label: 'ZooKeeper',   icon: <TreePine   className="w-4 h-4" /> },
-  { id: 'metrics',     label: 'Metrics',     icon: <BarChart3  className="w-4 h-4" /> },
+  { id: 'health',      label: 'Health',      icon: <BarChart3  className="w-4 h-4" /> },
   { id: 'query-log',   label: 'Query Log',   icon: <FileText   className="w-4 h-4" /> },
   { id: 'parts',       label: 'Parts',       icon: <HardDrive  className="w-4 h-4" /> },
   { id: 'processes',   label: 'Processes',   icon: <Terminal   className="w-4 h-4" /> },
@@ -259,7 +259,15 @@ export function Dashboard({ config, version, onDisconnect }: Props) {
         {tab === 'tables'      && <DistributedTables tables={filteredTables} config={config} />}
         {tab === 'replication' && <ReplicationStatus replicas={filteredReplicas} queue={filteredQueue} />}
         {tab === 'zookeeper'   && <ZookeeperNodes config={config} replicas={filteredReplicas} />}
-        {tab === 'metrics'     && <MetricsPanel config={config} />}
+        {tab === 'health'      && (
+          <HealthDashboard
+            config={config}
+            clusters={clusters}
+            replicas={replicas}
+            disks={disks}
+            onNavigate={setTab}
+          />
+        )}
         {tab === 'query-log'   && (
           <QueryLogViewer
             config={config}

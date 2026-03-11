@@ -15,6 +15,7 @@ import type {
   QueryThreadRow,
   TableHotspotRow,
   CrossShardRow,
+  ShardMetricRow,
   PartSummaryRow,
   PartDetailRow,
   ActiveMergeRow,
@@ -490,6 +491,28 @@ export async function fetchMutations(config: ConnectionConfig): Promise<Mutation
     FROM system.mutations
     ORDER BY create_time DESC
     LIMIT 500
+  `)
+}
+
+// ── Per-shard live metrics ────────────────────────────────────────────────────
+
+export async function fetchShardMetrics(
+  config: ConnectionConfig,
+  clusterName: string
+): Promise<ShardMetricRow[]> {
+  return runQuery<ShardMetricRow>(config, `
+    SELECT
+      _shard_num,
+      hostname()                                        AS host,
+      sumIf(value, metric = 'Query')                   AS active_queries,
+      sumIf(value, metric = 'Merge')                   AS active_merges,
+      sumIf(value, metric = 'MemoryTracking')          AS query_memory,
+      sumIf(value, metric = 'DelayedInserts')          AS delayed_inserts,
+      sumIf(value, metric = 'TCPConnection')           AS tcp_conns
+    FROM clusterAllReplicas('${clusterName.replace(/'/g, "\\'")}', system.metrics)
+    WHERE metric IN ('Query','Merge','MemoryTracking','DelayedInserts','TCPConnection')
+    GROUP BY _shard_num, host
+    ORDER BY _shard_num, host
   `)
 }
 

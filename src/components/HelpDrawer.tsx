@@ -196,24 +196,28 @@ ORDER BY database, table`,
     ],
   },
 
-  metrics: {
+  health: {
     icon: <BarChart3 className="w-4 h-4" />,
-    title: 'Live Metrics',
+    title: 'Health Dashboard',
     description:
-      'Real-time server health pulled from three system tables every 15 seconds. Gauge metrics are instantaneous readings (e.g. active queries right now). Event counters are cumulative since server start — the dashboard derives per-second rates by diffing consecutive snapshots. Async metrics are OS-level samples from a background thread.',
+      'A unified cluster health view combining live server metrics, replica state, disk usage, and per-shard traffic. Metrics are pulled from three system tables every 15 seconds. The status bar gives you an instant 6-axis health summary derived from live values — click any metric\'s ⓘ button for detailed meaning, impact, and when-to-act guidance.',
     significance: [
-      'system.metrics: instantaneous gauges — active queries, connections, background threads, merge queue depth.',
-      'system.events: monotonically increasing counters — total queries, inserts, failures. The dashboard shows these as per-second rates (delta / interval).',
-      'system.asynchronous_metrics: OS-level data collected in background — CPU load, physical RAM usage, disk I/O, load averages. More expensive than the other two.',
-      'Sparklines show 20 snapshots (~5 minutes of history). History resets if you reload the page.',
+      'Status bar pills (Cluster, Query Load, Ingestion, Hardware, Replication, Storage) each aggregate multiple signals into a single colour — green/yellow/red. Saves you from scanning dozens of individual metrics.',
+      'Alerts panel appears automatically when any threshold is breached — it includes direct navigation to the relevant detail tab.',
+      'Cluster & Shard Health section derives from system.replicas and system.disks (no extra queries). Per-shard traffic uses clusterAllReplicas() for live cross-shard comparison.',
+      'system.metrics: instantaneous gauges — active queries, connections, background threads.',
+      'system.events: monotonically increasing counters — rates derived by diffing consecutive 15-second snapshots.',
+      'system.asynchronous_metrics: OS-level data (CPU load, physical RAM, disk I/O). 40 snapshots retained (~10 minutes of sparkline history).',
+      'Click ⓘ on any metric card to open a detail drawer: what it measures, operational impact, when to act, and navigation to the relevant tab.',
     ],
     signals: [
-      { label: 'MemoryResident near OS limit', meaning: 'Risk of OOM kill — check max_memory_usage setting', severity: 'danger' },
-      { label: 'MaxPartCountForPartition > 300', meaning: 'Too many parts — merges are falling behind ingestion rate', severity: 'danger' },
-      { label: 'ReplicasMaxAbsoluteDelay > 300', meaning: 'Worst replication lag across all tables exceeds 5 min', severity: 'danger' },
-      { label: 'OSLoadAverage15 > CPU count', meaning: 'Sustained CPU saturation — queries will be slow', severity: 'warn' },
-      { label: 'FailedQuery rate > 0', meaning: 'Queries are failing — check query log for errors', severity: 'warn' },
-      { label: 'TCPConnection spike', meaning: 'Sudden connection burst — possible client retry storm', severity: 'warn' },
+      { label: 'Cluster pill red', meaning: 'A replica is read-only or has an expired ZK session', severity: 'danger' },
+      { label: 'Ingestion pill red', meaning: 'Max parts/partition ≥ 300 or ≥ 10 throttled inserts — inserts may be blocked', severity: 'danger' },
+      { label: 'Replication pill red', meaning: 'Max replica lag ≥ 300s — replicas are serving stale data', severity: 'danger' },
+      { label: 'Storage pill red', meaning: 'A disk is ≥ 95% full — data loss risk imminent', severity: 'danger' },
+      { label: 'FailedQuery rate > 0.1/s', meaning: 'Clients are receiving errors — check Query Log for exceptions', severity: 'warn' },
+      { label: 'Max Parts/Partition > 150', meaning: 'Insert throttling will start at 150 parts — merges are behind', severity: 'warn' },
+      { label: 'OSLoadAverage1 > core count', meaning: 'CPU is saturated — query latency will increase', severity: 'warn' },
     ],
     queries: [
       {
@@ -233,6 +237,21 @@ ORDER BY event`,
         sql: `SELECT metric, value, description
 FROM system.asynchronous_metrics
 ORDER BY metric`,
+      },
+      {
+        label: 'clusterAllReplicas — per-shard live metrics',
+        sql: `SELECT
+  _shard_num,
+  hostname()                                AS host,
+  sumIf(value, metric = 'Query')           AS active_queries,
+  sumIf(value, metric = 'Merge')           AS active_merges,
+  sumIf(value, metric = 'MemoryTracking')  AS query_memory,
+  sumIf(value, metric = 'DelayedInserts')  AS delayed_inserts,
+  sumIf(value, metric = 'TCPConnection')   AS tcp_conns
+FROM clusterAllReplicas('{cluster}', system.metrics)
+WHERE metric IN ('Query','Merge','MemoryTracking','DelayedInserts','TCPConnection')
+GROUP BY _shard_num, host
+ORDER BY _shard_num, host`,
       },
     ],
   },

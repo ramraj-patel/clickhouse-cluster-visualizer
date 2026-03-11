@@ -4,7 +4,7 @@ import { fetchMetrics, fetchEvents, fetchAsyncMetrics } from '../api/clickhouse'
 import type { ConnectionConfig } from '../types'
 
 const POLL_INTERVAL = 15_000  // 15 seconds
-const MAX_HISTORY   = 20      // ~5 minutes of history
+const MAX_HISTORY   = 40      // ~10 minutes of history
 
 export interface MetricSnapshot {
   ts: number

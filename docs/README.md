@@ -152,12 +152,14 @@ Point any static file server at the `dist/` directory, or let the Express server
 ```
 cluster-visualizer/
 ├── index.html              # Vite entry point
-├── vite.config.ts          # Vite config — proxies /api to :3001 in dev
+├── vite.config.ts          # Vite config — proxies /api to :3001 in dev, Vitest test block
+├── eslint.config.js        # ESLint flat config (TypeScript + React Hooks + Prettier)
+├── .prettierrc             # Prettier config
 ├── package.json
 ├── tsconfig.json
 ├── CONTEXT.md              # Authoritative architecture reference
 ├── config/
-│   ├── server.ts           # Express proxy server (Node.js, 30s timeout)
+│   ├── server.ts           # Express proxy server (30s timeout, CORS, SSRF protection)
 │   ├── postcss.config.js   # PostCSS config (Tailwind + Autoprefixer)
 │   └── tailwind.config.js  # Tailwind theme and content paths
 ├── docker/
@@ -171,11 +173,12 @@ cluster-visualizer/
     │   └── clickhouse.ts   # All ClickHouse query functions
     ├── components/
     │   ├── Dashboard.tsx
+    │   ├── ErrorBoundary.tsx
     │   ├── ClusterTopology.tsx
     │   ├── DistributedTables.tsx
     │   ├── ReplicationStatus.tsx
     │   ├── ZookeeperNodes.tsx
-    │   ├── MetricsPanel.tsx
+    │   ├── HealthDashboard.tsx
     │   ├── QueryLogViewer.tsx
     │   ├── PartsInspector.tsx
     │   ├── ProcessMonitor.tsx
@@ -185,11 +188,15 @@ cluster-visualizer/
     ├── hooks/
     │   ├── useClusterData.ts
     │   ├── useMetricsHistory.ts
+    │   ├── useShardMetrics.ts
+    │   ├── useUrlState.ts
     │   ├── useQueryLog.ts
     │   ├── useProcesses.ts
     │   ├── usePartsData.ts
     │   ├── useMutations.ts
     │   └── usePinnedTables.ts
+    ├── test/
+    │   └── utils/           # Unit tests (Vitest)
     ├── utils/
     │   └── format.ts       # fmtBytes, fmtDuration, fmtRows, fmtMarks, fmtAge
     └── types/
@@ -307,27 +314,28 @@ Click 📋 on a cluster header to copy the full cluster detail as JSON — inclu
 
 ---
 
-### Metrics
-`system.metrics` + `system.events` + `system.asynchronous_metrics`. Polled every 15 seconds.
+### Health
+`system.metrics` + `system.events` + `system.asynchronous_metrics` + `clusterAllReplicas(system.metrics)`. Metrics polled every 15 seconds, per-shard metrics every 15 seconds.
 
-- **Pause / Resume** button — stops polling so the page doesn't generate continuous queries (useful on busy clusters or when sharing your screen)
-- Status line shows time of last snapshot and "Paused — showing last snapshot" when paused
+**Status bar** — 6 composite health pills derived from live data, no extra queries:
 
-11 metric groups, each with SVG sparklines, current value, warn/danger thresholds:
+| Pill | Turns yellow when… | Turns red when… |
+|------|-------------------|----------------|
+| Cluster | any replica lag > 60 s | readonly / ZK expired / lag > 300 s |
+| Query Load | failed queries ≥ 0.1/s or active ≥ 50 | failed queries ≥ 1/s or active ≥ 200 |
+| Ingestion | delayed inserts ≥ 1 or parts per partition ≥ 150 | delayed inserts ≥ 10 or parts ≥ 300 |
+| Hardware | load avg ≥ 16 or threads ≥ 50 or memory ≥ 10 GB | load avg ≥ 32 or threads ≥ 100 or memory ≥ 30 GB |
+| Replication | lag ≥ 60 s or inserts in queue ≥ 50 | lag ≥ 300 s |
+| Storage | any disk > 85% | any disk > 95% |
 
-| Group | Key metrics |
-|-------|------------|
-| Query Performance | Active queries, QPS, select/insert rates, failed queries |
-| Memory | Resident RAM, virtual memory, uncompressed/mark cache |
-| CPU & Threads | OS load averages (1/5/15m), total threads, runnable threads |
-| Merges & Parts | Active merges, max parts per partition, rows/bytes merged/s |
-| Replication | Max replication lag, total merges queued, total inserts queued |
-| Connections | TCP, HTTP, interserver connections |
-| Ingestion | Rows inserted/s, bytes inserted/s |
-| Disk I/O | Read/write bytes/s |
-| Network | Send/receive bytes/s |
-| Locks | Lock contentions/s |
-| Background Work | Background pool tasks, moves, fetches |
+**Alerts panel** — auto-shown when any threshold is breached; each alert links directly to the relevant tab.
+
+**Cluster & Shard Health** — replica stat cards, disk usage bars, per-shard traffic table (active queries, merges, memory, throttled inserts, TCP connections via `clusterAllReplicas()`).
+
+**Metric sections** — 4 collapsible groups: Query Load, Ingestion & Merges, Hardware & Threads, Replication & Storage. Each metric card has:
+- SVG sparkline (10-minute history)
+- Current value with warn/danger threshold badge
+- **ⓘ detail drawer** — opens a bottom panel explaining: what the metric measures, operational impact, when to act with specific thresholds, and a direct navigation button to the relevant tab
 
 ---
 
@@ -394,6 +402,31 @@ Auto-rendered from `QUERIES.md` — documents all SQL queries the dashboard exec
 
 ---
 
+## Developer scripts
+
+```bash
+npm run dev          # Start frontend + proxy concurrently
+npm run build        # Production build → dist/
+npm test             # Run unit tests (Vitest)
+npm run test:watch   # Vitest watch mode
+npm run test:coverage # Coverage report (v8)
+npm run lint         # ESLint check
+npm run format       # Prettier format
+```
+
+---
+
+## Keyboard shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Alt+1` – `Alt+9` | Switch to tab 1–9 |
+| `Alt+0` | Switch to tab 10 (Query Docs) |
+
+Tab order: Topology (1), Tables (2), Replication (3), ZooKeeper (4), Health (5), Query Log (6), Parts (7), Processes (8), Mutations (9), Query Docs (0).
+
+---
+
 ## Troubleshooting
 
 **"Request failed with status code 401"**
@@ -416,7 +449,7 @@ lsof -ti:3001 | xargs kill
 lsof -ti:5173 | xargs kill
 ```
 
-**Metrics page shows "—" for all values**
+**Health tab shows "—" for all metric values**
 Some async metrics from ClickHouse come back as strings (`"NaN"`, `"Inf"`). The dashboard handles these gracefully and displays `—`. This is not an error.
 
 **Query Log — Thread detail shows "No thread data"**
@@ -438,9 +471,11 @@ The query is still running — `system.query_log` is only written after a query 
 
 | Feature | Min version |
 |---------|------------|
-| Core dashboard (Topology, Tables, Replication, Metrics) | 21.x+ |
+| Core dashboard (Topology, Tables, Replication) | 21.x+ |
+| Health Dashboard (metrics, events, async metrics) | 20.x+ |
+| Per-shard traffic (`clusterAllReplicas`) | 20.6+ |
 | ZooKeeper connection panel (`system.zookeeper_connection`) | 22.6+ |
 | ZooKeeper path explorer (`system.zookeeper`) | 21.x+ (requires ZK configured) |
 | Query Log, Parts Inspector, Process Monitor, Mutations | 21.x+ |
 | Thread detail (`system.query_thread_log`) | 21.x+ (requires `log_query_threads = 1`) |
-| Cross-shard breakdown (`clusterAllReplicas`) | 20.6+ |
+| Cross-shard query breakdown (`clusterAllReplicas`) | 20.6+ |

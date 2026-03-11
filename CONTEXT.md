@@ -48,6 +48,8 @@ cluster-visualizer/
 ├── tsconfig.node.json
 ├── package.json                  # scripts: dev | client | server | build | preview
 ├── CONTEXT.md                    # ← this file
+├── eslint.config.js              # ESLint flat config (TS + React Hooks + Prettier compat)
+├── .prettierrc                   # Prettier: singleQuote, no semi, 100 char width
 ├── config/
 │   ├── server.ts                 # Express proxy (POST /api/query, GET /api/ping)
 │   ├── tailwind.config.js        # ch-* color tokens
@@ -59,7 +61,7 @@ cluster-visualizer/
 │   ├── README.md                 # Setup, tabs overview, troubleshooting
 │   └── QUERIES.md                # SQL reference — keep in sync with clickhouse.ts
 └── src/
-    ├── main.tsx                  # ReactDOM.createRoot → App
+    ├── main.tsx                  # ReactDOM.createRoot → App, wrapped in top-level ErrorBoundary
     ├── App.tsx                   # Connection gate: ConnectionForm | Dashboard
     ├── index.css                 # Global styles
     ├── api/
@@ -70,23 +72,29 @@ cluster-visualizer/
     ├── utils/
     │   └── format.ts             # fmtBytes, fmtDuration, fmtElapsed, fmtAge, fmtRows, fmtMarks
     ├── hooks/
-    │   ├── useClusterData.ts     # 7 parallel queries (incl. disks + serverErrors), 30s refetch
+    │   ├── useClusterData.ts     # 6 parallel queries (clusters/replicas/tables/queue/disks/errors), tab-aware enabled flags, 30s refetch
     │   ├── useMetricsHistory.ts  # 15s polling, 40 snapshots (~10 min history), rate derivation
     │   ├── useShardMetrics.ts    # 15s polling — clusterAllReplicas() per-shard live metrics
-    │   ├── useProcesses.ts       # 5s refetch — live processes
-    │   ├── useMutations.ts       # 30s refetch — mutation tracker
+    │   ├── useUrlState.ts        # URL hash ↔ React state sync (#tab=topology format)
+    │   ├── useProcesses.ts       # 5s refetch — live processes, error backoff
+    │   ├── useMutations.ts       # 30s refetch — mutation tracker, error backoff
     │   ├── useQueryLog.ts        # On-demand (no auto-refresh) — investigative
     │   ├── usePartsData.ts       # usePartsSummary (60s) + useActiveMerges (15s)
-    │   └── usePinnedTables.ts    # localStorage persistence (generic, keyed)
+    │   └── usePinnedTables.ts    # localStorage persistence, versioned schema {v:1, keys:[...]}
+    ├── test/
+    │   ├── setup.ts              # @testing-library/jest-dom setup
+    │   └── utils/
+    │       ├── format.test.ts    # 16 tests for format utilities
+    │       └── safeNum.test.ts   # 9 tests for safeNum coercion
     └── components/
         ├── ConnectionForm.tsx
-        ├── Dashboard.tsx         # 10 tabs, db filter, header stats + disk/error badges
+        ├── Dashboard.tsx         # 10 tabs, db filter, header stats + disk/error badges, Alt+1–9 shortcuts
+        ├── ErrorBoundary.tsx     # React class error boundary — per-tab + root-level
         ├── ClusterTopology.tsx   # React Flow graph + NodeDrillDownPanel + RoutingPanel
         ├── DistributedTables.tsx
         ├── ReplicationStatus.tsx
         ├── ZookeeperNodes.tsx
         ├── HealthDashboard.tsx   # Health tab: status bar, alerts, cluster health, metric sections
-        ├── MetricsPanel.tsx      # Legacy — no longer mounted; HealthDashboard replaced it
         ├── QueryLogViewer.tsx    # Query log, hotspots, direct query_id lookup, thread/shard drill-down
         ├── PartsInspector.tsx    # 3-level drill-down, active merges banner, part history
         ├── ProcessMonitor.tsx    # Live processes, 5s refresh, "View in Log" cross-link
@@ -123,7 +131,10 @@ All API responses return `{ data: T[], rows: number, statistics: {...} }`.
 
 - Timeout: **30s** (increased from 15s to support 24h query_log windows and clusterAllReplicas())
 - Auth: Basic HTTP auth if `username` supplied
-- Error: Returns 5xx with ClickHouse error message
+- Error: Returns 5xx with sanitized ClickHouse error (`Code: N. DB::Exception: ...` parsed, stack traces stripped)
+- **Body limit**: `64kb` — prevents oversized payloads
+- **SSRF protection**: hostname validated against `/^[a-zA-Z0-9.\-:[\]]+$/` — rejects non-hostname values
+- **CORS**: In production (`NODE_ENV=production`) restricted to `ALLOWED_ORIGINS` env var (comma-separated); unrestricted in dev
 
 ---
 
@@ -166,12 +177,21 @@ Every function signature: `fn(config: ConnectionConfig, ...args): Promise<T[]>`
 
 ## Hooks
 
-### useClusterData(config)
-- Runs 7 parallel `useQuery` calls: clusters, replicas, tables, replicationQueue, metrics, disks, serverErrors
-- `refetchInterval: 30_000`, `staleTime: 10_000`
-- Returns all arrays + `isLoading`, `error`, `refetchAll()`
+### useClusterData(config, activeTab)
+- Runs 6 parallel `useQuery` calls: clusters, replicas, tables, replicationQueue, disks, serverErrors
+- `refetchInterval: 30_000` with **error backoff**: `(q) => q.state.status === 'error' ? false : 30_000`
+- `staleTime: 10_000`
+- **Tab-aware `enabled` flags**: `tables` enabled only for `topology | tables | health`; `replicationQueue` enabled only for `replication`; others always enabled (they power header stats)
+- Returns arrays + `isLoading`, `error`, `refetchAll()`
 - `disks` and `serverErrors` drive header badge signals (disk warning at >85%, danger >95%; error count)
 - Used only in: `Dashboard.tsx`
+
+### useUrlState(param, defaultValue, validValues)
+- Generic hook: syncs a typed string value to `window.location.hash` (`#tab=topology&...` format)
+- On mount: reads hash, validates against `validValues` allowlist, falls back to `defaultValue`
+- Setter updates both React state and the hash atomically
+- Listens to `popstate` and `hashchange` for browser back/forward navigation
+- Used by: `Dashboard.tsx` to persist the active tab across reloads and make URLs shareable
 
 ### useMetricsHistory(config, paused)
 - Polls fetchMetrics + fetchEvents + fetchAsyncMetrics every 15s
@@ -191,6 +211,7 @@ Every function signature: `fn(config: ConnectionConfig, ...args): Promise<T[]>`
 ### usePinnedTables(storageKey)
 - Generic localStorage persistence for a Set<string>
 - Three separate storage keys in use: `ch-pinned-tables`, `ch-pinned-replicas`, `ch-pinned-zk`
+- **Versioned schema**: stores `{ v: 1, keys: string[] }` envelope; migrates legacy bare arrays transparently; clears and returns empty set for unknown versions
 
 ---
 
@@ -198,9 +219,11 @@ Every function signature: `fn(config: ConnectionConfig, ...args): Promise<T[]>`
 
 ### Dashboard.tsx
 Central shell. 10 tabs: `topology`, `tables`, `replication`, `zookeeper`, `health`, `query-log`, `parts`, `processes`, `mutations`, `docs`.
-Owns: tab state, db filter dropdown, header stats, disk/error badge signals, `queryFilter` state.
+Owns: tab state (persisted in URL hash via `useUrlState`), db filter dropdown, header stats, disk/error badge signals, `queryFilter` state.
 `queryFilter` + `handleViewInLog(queryId)` implement the Process Monitor → Query Log cross-link.
 Tab bar: `overflow-x-auto` to handle 10 tabs on narrow screens.
+Each tab content is wrapped in its own `<ErrorBoundary>` — a crash in one tab doesn't affect others; boundary auto-resets when tab unmounts and remounts.
+**Keyboard shortcuts**: `Alt+1` – `Alt+9` switch tabs by index; `Alt+0` for tab 10.
 Health tab renders `<HealthDashboard config={config} clusters={clusters} replicas={replicas} disks={disks} onNavigate={setTab} />`.
 
 ### ClusterTopology.tsx
@@ -263,8 +286,12 @@ interface MetricDef {
 | Replication | ReplicasMaxAbsoluteDelay ≥ 300 | lag ≥ 60 OR ReplicasSumInsertsInQueue ≥ 50 |
 | Storage | any disk used_fraction ≥ 0.95 | any disk used_fraction ≥ 0.85 |
 
-### MetricsPanel.tsx
-**Legacy — no longer mounted.** File kept for reference. All metrics were migrated to `HealthDashboard.tsx` with richer metadata. Can be deleted safely.
+### ErrorBoundary.tsx
+React class component. Catches JS errors in descendant render and shows a fallback error card instead of crashing the full app.
+Props: `label` (shown in fallback), `fallback` (custom fallback node), `onError` (error callback).
+`reset()` clears the error state — the "Try again" button in the fallback UI calls this.
+Because tab content is conditionally rendered, navigating away and back automatically resets the boundary (no `key` prop needed).
+Used: wrapping each of the 10 tabs in `Dashboard.tsx`, and wrapping root `<App>` in `main.tsx`.
 
 ### QueryLogViewer.tsx
 3 views: query list with inline expand, table hotspots. Histogram view was removed.
@@ -375,6 +402,9 @@ Dark theme only. No light mode.
 11. **`is_initial_query = 1`** must be in all `system.query_log` list queries to exclude distributed sub-queries from the main list. Exception: `fetchQuerySubQueries` and `fetchQueryById` intentionally omit this filter.
 12. **ProfileEvents aliases in ORDER BY** — do NOT use column aliases for ProfileEvents expressions in ORDER BY. Use the expression directly: `ORDER BY ProfileEvents['RealTimeMicroseconds'] DESC` (not `ORDER BY real_us DESC` — can fail in some ClickHouse versions).
 13. **TanStack Query v5 `refetchInterval` function form** — when polling should stop once data arrives: `refetchInterval: (query) => query.state.data?.length ? false : 5_000`.
+14. **ErrorBoundary auto-reset** — wrapping each tab in `<ErrorBoundary>` is sufficient; navigating away unmounts the component tree which resets `hasError`. No `key` prop tricks needed.
+15. **`useUrlState` only for static allowlists** — do NOT use for values whose valid set is determined by server data (e.g. database names). Those stay in `useState`. Only `tab` (known at compile time) uses URL hash state.
+16. **SQL escaping** — always use the module-level `esc()` helper from `clickhouse.ts` for user-supplied strings in SQL. It uses ANSI `''` (double-single-quote). Never use `\\'` (MySQL-ism, unreliable in ClickHouse).
 
 ---
 
@@ -407,9 +437,21 @@ The ZK connections fetch gracefully handles 404 (older versions) by returning em
 | Disk health signals | `system.disks` | **Built** — header badge, warns at 85%, critical at 95% |
 | Server error signals | `system.errors` | **Built** — header badge with error type count |
 | Health Dashboard | `system.metrics`, `system.events`, `system.asynchronous_metrics`, `clusterAllReplicas(system.metrics)` | **Built** — status bar, alerts, cluster health, per-shard traffic, metric detail drawer |
-| Alerting / threshold notifications | (existing thresholds) | Not started |
+| Error boundaries | — | **Built** — per-tab + root-level; tab crashes isolated |
+| URL hash state | — | **Built** — active tab in `#tab=...`, survives reload, shareable |
+| Keyboard shortcuts | — | **Built** — Alt+1–9 for tab navigation |
+| Polling error backoff | — | **Built** — all hooks stop refetching on error |
+| LIMIT truncation warnings | — | **Built** — QueryLogViewer (500 rows) and PartsInspector (5000 rows) |
+| localStorage versioning | — | **Built** — `usePinnedTables` uses `{v:1, keys:[]}` envelope |
+| SQL escaping | — | **Built** — all 13 sites use ANSI `''` form via module-level `esc()` |
+| Server security | — | **Built** — CORS restriction, body limit, SSRF validation, error sanitization |
+| DX tooling | — | **Built** — ESLint (flat config), Prettier, Vitest (25 tests) |
+| QueryLogViewer decomposition | — | Planned — split ~750-line component into 5 focused files |
+| List virtualization | — | Planned — `@tanstack/react-virtual` for PartsInspector (5K rows) + QueryLogViewer |
+| Accessibility | — | Planned — `aria-label` on icon-only buttons, non-color status indicators |
+| CSV export | — | Planned — QueryLogViewer + PartsInspector export buttons |
+| Alerting / push notifications | (existing thresholds) | Not started |
 | Custom SQL console | ad-hoc queries | Not started |
-| Export (JSON/CSV) | (existing data) | Not started |
 
 ---
 
@@ -428,6 +470,15 @@ npm run server       # :3001
 # Production build
 npm run build        # dist/ → served by Express in production
 
+# Tests
+npm test             # vitest run (single pass)
+npm run test:watch   # vitest watch mode
+npm run test:coverage # vitest with v8 coverage report
+
+# Lint & format
+npm run lint         # eslint src/ config/ (.ts, .tsx)
+npm run format       # prettier --write src/ config/
+
 # Docker
 docker compose -f docker/docker-compose.yml up --build
 ```
@@ -445,4 +496,4 @@ Exposed port: 3001
 
 ---
 
-*Last updated: 2026-03-11 — Health Dashboard complete. All planned observability features built. Tabs: topology, tables, replication, zookeeper, health, query-log, parts, processes, mutations, docs.*
+*Last updated: 2026-03-11 — Gap analysis complete. Security hardening, error boundaries, URL hash state, keyboard shortcuts, polling backoff, localStorage versioning, LIMIT warnings, SQL escaping fix, DX tooling (ESLint + Prettier + Vitest). Tabs: topology, tables, replication, zookeeper, health, query-log, parts, processes, mutations, docs.*

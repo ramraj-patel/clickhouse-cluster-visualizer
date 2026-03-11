@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import {
   RefreshCw, LogOut, Activity, Database, GitBranch, TreePine,
   BarChart3, AlertCircle, ChevronDown, BookOpen, HelpCircle,
@@ -16,6 +16,8 @@ import { QueryLogViewer } from './QueryLogViewer'
 import { PartsInspector } from './PartsInspector'
 import { ProcessMonitor } from './ProcessMonitor'
 import { MutationsTracker } from './MutationsTracker'
+import { ErrorBoundary } from './ErrorBoundary'
+import { useUrlState } from '../hooks/useUrlState'
 import { safeNum } from '../api/clickhouse'
 import type { ConnectionConfig, ActiveTab } from '../types'
 
@@ -38,22 +40,40 @@ const TABS: { id: ActiveTab; label: string; icon: React.ReactNode }[] = [
   { id: 'docs',        label: 'Query Docs',  icon: <BookOpen   className="w-4 h-4" /> },
 ]
 
+const TAB_IDS = TABS.map(t => t.id) as ActiveTab[]
+
 export function Dashboard({ config, version, onDisconnect }: Props) {
-  const [tab, setTab]               = useState<ActiveTab>('topology')
+  // Tab is persisted in the URL hash (#tab=topology) — survives page refresh and is shareable.
+  const [tab, setTab]               = useUrlState<ActiveTab>('tab', 'topology', TAB_IDS)
   const [showHelp, setShowHelp]     = useState(false)
   const [selectedDb, setSelectedDb] = useState<string>('__all__')
   const [queryFilter, setQueryFilter] = useState<string | null>(null)
 
   const {
-    clusters, replicas, tables, replicationQueue, metrics,
+    clusters, replicas, tables, replicationQueue,
     disks, serverErrors,
     isLoading, error, refetchAll,
-  } = useClusterData(config)
+  } = useClusterData(config, tab)
 
   // Clear query filter when navigating away from query-log tab
   useEffect(() => {
     if (tab !== 'query-log') setQueryFilter(null)
   }, [tab])
+
+  // Keyboard shortcuts: Alt+1–9 switch tabs (Alt+0 for tab 10)
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (!e.altKey || e.ctrlKey || e.metaKey) return
+    const n = e.key === '0' ? 10 : parseInt(e.key)
+    if (!isNaN(n) && n >= 1 && n <= TABS.length) {
+      e.preventDefault()
+      setTab(TABS[n - 1].id)
+    }
+  }, [setTab])
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [handleKeyDown])
 
   // Direction A: Process Monitor → Query Log
   function handleViewInLog(queryId: string) {
@@ -238,52 +258,62 @@ export function Dashboard({ config, version, onDisconnect }: Props) {
       {/* Help drawer */}
       {showHelp && <HelpDrawer tab={tab} onClose={() => setShowHelp(false)} />}
 
-      {/* Content */}
+      {/* Content — each tab is wrapped in its own ErrorBoundary so a crash in one
+          tab doesn't kill the others. Boundaries reset automatically when the tab
+          unmounts (user navigates away) and remounts. */}
       <main className="flex-1 overflow-auto relative">
         {tab === 'topology' && (
-          <div className="h-full">
-            {isLoading ? (
-              <div className="flex items-center justify-center h-full text-ch-muted text-sm">
-                Loading cluster topology…
-              </div>
-            ) : (
-              <ClusterTopology
-                clusters={scopedClusterNodes}
-                replicas={filteredReplicas}
-                tables={tables}
-                config={config}
-              />
-            )}
-          </div>
+          <ErrorBoundary label="Topology tab">
+            <div className="h-full">
+              {isLoading ? (
+                <div className="flex items-center justify-center h-full text-ch-muted text-sm">
+                  Loading cluster topology…
+                </div>
+              ) : (
+                <ClusterTopology
+                  clusters={scopedClusterNodes}
+                  replicas={filteredReplicas}
+                  tables={tables}
+                  config={config}
+                />
+              )}
+            </div>
+          </ErrorBoundary>
         )}
-        {tab === 'tables'      && <DistributedTables tables={filteredTables} config={config} />}
-        {tab === 'replication' && <ReplicationStatus replicas={filteredReplicas} queue={filteredQueue} />}
-        {tab === 'zookeeper'   && <ZookeeperNodes config={config} replicas={filteredReplicas} />}
+        {tab === 'tables'      && <ErrorBoundary label="Tables tab"><DistributedTables tables={filteredTables} config={config} /></ErrorBoundary>}
+        {tab === 'replication' && <ErrorBoundary label="Replication tab"><ReplicationStatus replicas={filteredReplicas} queue={filteredQueue} /></ErrorBoundary>}
+        {tab === 'zookeeper'   && <ErrorBoundary label="ZooKeeper tab"><ZookeeperNodes config={config} replicas={filteredReplicas} /></ErrorBoundary>}
         {tab === 'health'      && (
-          <HealthDashboard
-            config={config}
-            clusters={clusters}
-            replicas={replicas}
-            disks={disks}
-            onNavigate={setTab}
-          />
+          <ErrorBoundary label="Health tab">
+            <HealthDashboard
+              config={config}
+              clusters={clusters}
+              replicas={replicas}
+              disks={disks}
+              onNavigate={setTab}
+            />
+          </ErrorBoundary>
         )}
         {tab === 'query-log'   && (
-          <QueryLogViewer
-            config={config}
-            filterQueryId={queryFilter}
-            onClearFilter={() => setQueryFilter(null)}
-          />
+          <ErrorBoundary label="Query Log tab">
+            <QueryLogViewer
+              config={config}
+              filterQueryId={queryFilter}
+              onClearFilter={() => setQueryFilter(null)}
+            />
+          </ErrorBoundary>
         )}
-        {tab === 'parts'       && <PartsInspector config={config} />}
+        {tab === 'parts'       && <ErrorBoundary label="Parts tab"><PartsInspector config={config} /></ErrorBoundary>}
         {tab === 'processes'   && (
-          <ProcessMonitor
-            config={config}
-            onViewInLog={handleViewInLog}
-          />
+          <ErrorBoundary label="Processes tab">
+            <ProcessMonitor
+              config={config}
+              onViewInLog={handleViewInLog}
+            />
+          </ErrorBoundary>
         )}
-        {tab === 'mutations'   && <MutationsTracker config={config} />}
-        {tab === 'docs'        && <QueryDocs />}
+        {tab === 'mutations'   && <ErrorBoundary label="Mutations tab"><MutationsTracker config={config} /></ErrorBoundary>}
+        {tab === 'docs'        && <ErrorBoundary label="Query Docs tab"><QueryDocs /></ErrorBoundary>}
       </main>
     </div>
   )

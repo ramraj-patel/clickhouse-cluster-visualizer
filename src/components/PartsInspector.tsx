@@ -164,12 +164,14 @@ function TableRow({ row, config }: { row: PartSummaryRow; config: ConnectionConf
   const health = partHealth(row)
   const healthIcon = health === 'danger' ? '🔴' : health === 'warn' ? '🟡' : '🟢'
 
+  const PARTS_LIMIT = 5000
   const { data: parts } = useQuery({
     queryKey: ['parts_detail', config, row.database, row.table],
     queryFn: () => fetchPartsForTable(config, row.database, row.table),
     enabled: open,
     staleTime: 60_000,
   })
+  const partsTruncated = (parts?.length ?? 0) >= PARTS_LIMIT
 
   // Group parts by partition
   const partitions = useMemo(() => {
@@ -242,9 +244,17 @@ function TableRow({ row, config }: { row: PartSummaryRow; config: ConnectionConf
           {!parts ? (
             <div className="px-6 py-4 text-xs text-ch-muted animate-pulse">Loading partitions…</div>
           ) : (
-            partitions.map(([pid, pparts]) => (
-              <PartitionSection key={pid} partitionId={pid} parts={pparts} />
-            ))
+            <>
+              {partsTruncated && (
+                <div className="mx-4 mb-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-xs">
+                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                  Showing first {PARTS_LIMIT.toLocaleString()} parts — table has more. Results are truncated.
+                </div>
+              )}
+              {partitions.map(([pid, pparts]) => (
+                <PartitionSection key={pid} partitionId={pid} parts={pparts} />
+              ))}
+            </>
           )}
         </div>
       )}

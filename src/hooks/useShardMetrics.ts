@@ -13,7 +13,11 @@ export function useShardMetrics(
     queryKey: ['shard_metrics', config, clusterName],
     queryFn: () => fetchShardMetrics(config!, clusterName!),
     enabled: !!config && !!clusterName && !paused,
-    refetchInterval: paused ? false : POLL_INTERVAL,
+    refetchInterval: (q) => {
+      if (paused) return false
+      if (q.state.status === 'error') return false
+      return POLL_INTERVAL
+    },
     staleTime: POLL_INTERVAL - 1000,
     retry: 1,
   })

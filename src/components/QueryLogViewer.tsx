@@ -1053,7 +1053,17 @@ export function QueryLogViewer({ config, filterQueryId, onClearFilter }: Props) 
 
       {/* Summary bar */}
       <div className="flex items-center gap-6 px-6 py-2.5 border-b border-ch-border bg-ch-surface/30 flex-shrink-0 text-xs">
-        <span className="text-ch-muted">Showing <span className="text-ch-text font-semibold">{filtered.length}</span></span>
+        <span className="text-ch-muted">
+          Showing <span className="text-ch-text font-semibold">{filtered.length}</span>
+          {!filterQueryId && rows.length >= limit && (
+            <span
+              className="ml-1.5 text-yellow-400"
+              title={`Results capped at ${limit}. Reduce the time window or increase the limit to see more.`}
+            >
+              ⚠ {limit} limit reached
+            </span>
+          )}
+        </span>
         {hideSystem && systemCount > 0 && (
           <span className="text-ch-muted">{systemCount} system hidden</span>
         )}

@@ -32,6 +32,13 @@ export const safeNum = (v: unknown): number => {
   return isFinite(n) ? n : 0
 }
 
+/**
+ * Escape a string for use inside a ClickHouse SQL single-quoted string literal.
+ * Uses the ANSI-standard '' (double-quote) form — NOT backslash escaping.
+ * Backslash escaping (\') is MySQL-ism and unreliable across ClickHouse configs.
+ */
+const esc = (s: string): string => s.replace(/'/g, "''")
+
 interface ClickHouseResponse<T> {
   data: T[]
   rows: number
@@ -106,7 +113,7 @@ export async function fetchTableColumns(
       default_kind, default_expression, comment,
       position
     FROM system.columns
-    WHERE database = '${database.replace(/'/g, "\\'")}' AND table = '${table.replace(/'/g, "\\'")}'
+    WHERE database = '${esc(database)}' AND table = '${esc(table)}'
     ORDER BY position`
   )
 }
@@ -129,7 +136,7 @@ export async function fetchZookeeperNodes(
     config,
     `SELECT name, value, numChildren, path
      FROM system.zookeeper
-     WHERE path = '${path.replace(/'/g, "\\'")}'`
+     WHERE path = '${esc(path)}'`
   )
 }
 
@@ -192,7 +199,6 @@ export async function fetchQueryLog(
   tables: string[] = [],
   search: string = ''
 ): Promise<QueryLogRow[]> {
-  const esc = (s: string) => s.replace(/'/g, "''")
   const excludeClauses = excludePatterns
     .map(p => `AND query NOT ILIKE '%${esc(p)}%'`)
     .join('\n      ')
@@ -269,7 +275,6 @@ export async function fetchQueryById(
   config: ConnectionConfig,
   queryId: string
 ): Promise<QueryLogRow[]> {
-  const safe = queryId.replace(/'/g, "\\'")
   return runQuery<QueryLogRow>(config, `
     SELECT
       query_id, initial_query_id, is_initial_query,
@@ -288,7 +293,7 @@ export async function fetchQueryById(
       ProfileEvents['ReadCompressedBytes']     AS read_compressed_bytes,
       length(thread_ids)                       AS thread_count
     FROM system.query_log
-    WHERE query_id = '${safe}'
+    WHERE query_id = '${esc(queryId)}'
       AND type IN ('QueryFinish', 'ExceptionBeforeStart', 'ExceptionWhileProcessing')
     ORDER BY event_time ASC
   `)
@@ -314,7 +319,7 @@ export async function fetchQuerySubQueries(
       0 AS read_compressed_bytes,
       length(thread_ids)                       AS thread_count
     FROM system.query_log
-    WHERE initial_query_id = '${initialQueryId.replace(/'/g, "\\'")}'
+    WHERE initial_query_id = '${esc(initialQueryId)}'
       AND is_initial_query = 0
     ORDER BY event_time ASC
   `)
@@ -324,7 +329,6 @@ export async function fetchQueryThreadDetail(
   config: ConnectionConfig,
   queryId: string
 ): Promise<QueryThreadRow[]> {
-  const safe = queryId.replace(/'/g, "\\'")
   return runQuery<QueryThreadRow>(config, `
     SELECT
       thread_name, thread_id,
@@ -334,7 +338,7 @@ export async function fetchQueryThreadDetail(
       ProfileEvents['SystemTimeMicroseconds'] AS sys_us,
       ProfileEvents['SelectedMarks']          AS marks_read
     FROM system.query_thread_log
-    WHERE query_id = '${safe}'
+    WHERE query_id = '${esc(queryId)}'
     ORDER BY ProfileEvents['RealTimeMicroseconds'] DESC
   `)
 }
@@ -376,8 +380,8 @@ export async function fetchCrossShardBreakdown(
       ProfileEvents['RealTimeMicroseconds']   AS real_us,
       ProfileEvents['UserTimeMicroseconds']   AS user_us,
       length(thread_ids)                      AS thread_count
-    FROM clusterAllReplicas('${clusterName.replace(/'/g, "\\'")}', system.query_log)
-    WHERE initial_query_id = '${initialQueryId.replace(/'/g, "\\'")}'
+    FROM clusterAllReplicas('${esc(clusterName)}', system.query_log)
+    WHERE initial_query_id = '${esc(initialQueryId)}'
     ORDER BY _shard_num
   `)
 }
@@ -420,8 +424,8 @@ export async function fetchPartsForTable(
       refcount, min_block_number, max_block_number
     FROM system.parts
     WHERE active = 1
-      AND database = '${database.replace(/'/g, "\\'")}'
-      AND table = '${table.replace(/'/g, "\\'")}'
+      AND database = '${esc(database)}'
+      AND table = '${esc(table)}'
     ORDER BY partition, bytes_on_disk DESC
     LIMIT 5000
   `)
@@ -450,8 +454,8 @@ export async function fetchPartLog(
       event_type, part_name, merged_from,
       duration_ms, rows, size_in_bytes, peak_memory_usage
     FROM system.part_log
-    WHERE database = '${database.replace(/'/g, "\\'")}'
-      AND table = '${table.replace(/'/g, "\\'")}'
+    WHERE database = '${esc(database)}'
+      AND table = '${esc(table)}'
       AND event_time >= now() - INTERVAL 1 DAY
     ORDER BY event_time DESC
     LIMIT 200
@@ -509,7 +513,7 @@ export async function fetchShardMetrics(
       sumIf(value, metric = 'MemoryTracking')          AS query_memory,
       sumIf(value, metric = 'DelayedInserts')          AS delayed_inserts,
       sumIf(value, metric = 'TCPConnection')           AS tcp_conns
-    FROM clusterAllReplicas('${clusterName.replace(/'/g, "\\'")}', system.metrics)
+    FROM clusterAllReplicas('${esc(clusterName)}', system.metrics)
     WHERE metric IN ('Query','Merge','MemoryTracking','DelayedInserts','TCPConnection')
     GROUP BY _shard_num, host
     ORDER BY _shard_num, host

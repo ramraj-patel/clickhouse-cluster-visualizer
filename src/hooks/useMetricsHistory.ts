@@ -40,7 +40,11 @@ export function useMetricsHistory(config: ConnectionConfig | null, paused = fals
       return snap
     },
     enabled: !!config && !paused,
-    refetchInterval: paused ? false : POLL_INTERVAL,
+    refetchInterval: (q) => {
+      if (paused) return false
+      if (q.state.status === 'error') return false
+      return POLL_INTERVAL
+    },
     staleTime: POLL_INTERVAL - 1000,
   })
 

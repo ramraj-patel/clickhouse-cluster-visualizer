@@ -134,7 +134,7 @@ Returns one row per replicated table per replica on the **current node**. This i
 SELECT
   database, name, engine, engine_full,
   create_table_query, partition_key, sorting_key, primary_key,
-  total_rows, total_bytes
+  total_rows, total_bytes, storage_policy
 FROM system.tables
 WHERE engine IN (
   'Distributed',
@@ -165,6 +165,7 @@ Lists all tables that participate in distributed or replicated operations. `Dist
 | `primary_key`       | String  | `PRIMARY KEY` if different from sorting key (empty otherwise)                |
 | `total_rows`        | UInt64? | Approximate total row count (`NULL` for Distributed tables)                  |
 | `total_bytes`       | UInt64? | Approximate on-disk size in bytes (`NULL` for Distributed tables)            |
+| `storage_policy`    | String  | Storage policy name (e.g. `default`, `ssd_in_order`); empty for non-MergeTree engines |
 
 **Note on NULLs:** `Distributed` engine tables are logical wrappers and do not store data locally, so `total_rows` and `total_bytes` are `NULL` for them. Physical replicated tables report their local shard's data only.
 

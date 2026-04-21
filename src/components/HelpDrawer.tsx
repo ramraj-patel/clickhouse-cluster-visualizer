@@ -64,16 +64,19 @@ ORDER BY database, table`,
     icon: <Database className="w-4 h-4" />,
     title: 'Distributed & Replicated Tables',
     description:
-      'Shows every table participating in distributed or replicated storage. Distributed tables (the logical entry point for queries) are primary cards; their underlying ReplicatedMergeTree tables are linked inside each card. Orphaned replicated tables with no matching Distributed table appear as secondary cards.',
+      'Shows every table participating in distributed or replicated storage. Distributed tables (the logical entry point for queries) are primary cards; their underlying ReplicatedMergeTree tables are linked inside each card. Orphaned replicated tables with no matching Distributed table appear as secondary cards. Each Distributed table card includes a Shard Topology section showing which hosts and shards serve the table.',
     significance: [
       'Distributed tables are the query target — understanding their config (cluster, target table, shard key) tells you how writes are routed across shards.',
+      'Shard Topology shows the exact hosts holding each shard — use this to identify which nodes to check when a specific table has issues.',
       'Shard key determines data distribution. A poor shard key (e.g. rand()) causes uneven shards; a business key (e.g. toYYYYMM(date)) may cause hotspots.',
       'Partition key and sort key are critical for query performance — queries that filter on the sort key use sparse index lookups instead of full scans.',
+      'Storage policy shows which disk/volume configuration the table uses — e.g. a JBOD policy across 12 SSDs vs a single default disk.',
       'TTL expressions show when data ages out automatically — important for storage capacity planning.',
     ],
     signals: [
       { label: 'NULL rows / bytes', meaning: 'Distributed table — data lives on remote shards, not locally', severity: 'info' },
       { label: 'Large total_bytes', meaning: 'Consider whether TTL or tiered storage is configured', severity: 'info' },
+      { label: 'Storage policy = default on large table', meaning: 'May benefit from a multi-disk JBOD policy for better I/O', severity: 'info' as const },
       { label: 'No linked replicated table', meaning: 'Distributed table points to a table not visible on this node', severity: 'warn' },
       { label: 'Schema section empty', meaning: 'Columns query failed — check access permissions', severity: 'warn' },
     ],
@@ -83,7 +86,7 @@ ORDER BY database, table`,
         sql: `SELECT
   database, name, engine, engine_full,
   create_table_query, partition_key, sorting_key, primary_key,
-  total_rows, total_bytes
+  total_rows, total_bytes, storage_policy
 FROM system.tables
 WHERE engine IN (
   'Distributed', 'ReplicatedMergeTree',
@@ -523,32 +526,54 @@ LIMIT 200`,
     icon: <Server className="w-4 h-4" />,
     title: 'Hosts',
     description:
-      'Per-host view of every node in the cluster. Shows hardware resources (CPU, memory, disk), file descriptors, table counts, and shard/replica assignment. Data is fetched via clusterAllReplicas() queries across all nodes.',
+      'Per-host view of every node in the cluster. Shows hardware resources (CPU cores, memory, load average), open file handles, disk partitions with usage bars, and a searchable table list per host. Storage Policies section shows cluster-wide disk/volume configuration. All cross-node data is fetched via clusterAllReplicas() queries.',
     significance: [
       'Memory and disk usage are the most common causes of ClickHouse instability — monitor both per host.',
-      'File descriptor exhaustion (open FDs near max) can cause query failures and connection drops.',
+      'Open file count (read + write handles) indicates I/O pressure — spikes may signal too many concurrent queries or merges.',
       'Uneven table counts across hosts may indicate replication lag or failed schema migrations.',
+      'Storage policies define how data is spread across disks — JBOD with ROUND_ROBIN distributes I/O evenly across multiple SSDs.',
+      'CPU core count and load average help identify CPU-bound hosts — load consistently above core count means queries are queuing.',
     ],
     signals: [
       { label: 'Memory > 95%', meaning: 'Host at risk of OOM — queries may be killed', severity: 'danger' as const },
       { label: 'Disk > 85%', meaning: 'Disk pressure — merges and inserts may slow down', severity: 'warn' as const },
-      { label: 'FDs > 80% of max', meaning: 'File descriptor exhaustion risk — increase ulimit', severity: 'warn' as const },
       { label: 'Load average > CPU cores', meaning: 'Host is CPU-saturated — queries will queue', severity: 'warn' as const },
+      { label: 'High open file count', meaning: 'I/O pressure — check concurrent merges and queries', severity: 'info' as const },
+      { label: 'Table count mismatch across hosts', meaning: 'Schema may not have replicated — check DDL queue', severity: 'warn' as const },
     ],
     queries: [
       {
-        label: 'clusterAllReplicas — host system metrics',
-        sql: `SELECT hostname() AS host, metric, value
+        label: 'clusterAllReplicas — host system metrics (async_metrics + metrics)',
+        sql: `-- Memory, uptime, load from system.asynchronous_metrics
+-- CPU cores derived from count of CPUFrequencyMHz_* metrics
+-- Open files from system.metrics (OpenFileForRead + OpenFileForWrite)
+SELECT hostname() AS host, _shard_num,
+  maxIf(value, metric = 'OSMemoryTotal') AS os_memory_total,
+  maxIf(value, metric = 'OSMemoryAvailable') AS os_memory_available,
+  toUInt32(countIf(metric LIKE 'CPUFrequencyMHz_%')) AS cpu_cores,
+  maxIf(value, metric = 'LoadAverage1') AS load_average_1m
 FROM clusterAllReplicas('cluster', system.asynchronous_metrics)
-WHERE metric IN ('Uptime','OSMemoryTotal','OSMemoryAvailable',
-  'NumberOfPhysicalCPUCores','LoadAverage1','LoadAverage5',
-  'OpenFileDescriptorCount','MaxFileDescriptorCount')`,
+GROUP BY host, _shard_num`,
       },
       {
         label: 'clusterAllReplicas — host disk usage',
         sql: `SELECT hostname() AS host, name, path, type,
   free_space, total_space
 FROM clusterAllReplicas('cluster', system.disks)`,
+      },
+      {
+        label: 'clusterAllReplicas — table list per host',
+        sql: `SELECT hostname() AS host, database, name, engine,
+  total_rows, total_bytes
+FROM clusterAllReplicas('cluster', system.tables)
+WHERE database NOT IN ('system','INFORMATION_SCHEMA','information_schema')`,
+      },
+      {
+        label: 'system.storage_policies — cluster-wide storage configuration',
+        sql: `SELECT policy_name, volume_name, volume_priority,
+  disks, volume_type, load_balancing
+FROM system.storage_policies
+ORDER BY policy_name, volume_priority`,
       },
     ],
   },

@@ -76,6 +76,8 @@ Fill in the connection form:
 
 Click **Connect**. The dashboard loads once the connection test succeeds.
 
+> **Session persistence:** Your connection config is saved in `sessionStorage` — refreshing the page will reconnect automatically. The session clears when you close the browser tab or click **Disconnect**.
+
 ---
 
 ## Option 2 — Run with Docker
@@ -183,6 +185,7 @@ cluster-visualizer/
     │   ├── PartsInspector.tsx
     │   ├── ProcessMonitor.tsx
     │   ├── MutationsTracker.tsx
+    │   ├── HostsPanel.tsx
     │   ├── HelpDrawer.tsx
     │   └── QueryDocs.tsx
     ├── hooks/
@@ -284,6 +287,8 @@ Click 📋 on a cluster header to copy the full cluster detail as JSON — inclu
 `system.tables` filtered to `Distributed` and `Replicated*` engines.
 
 - **Distributed tables** shown as primary cards — parsed engine config shows cluster, underlying table, shard key
+- **Shard Topology** — shows which hosts and shards serve each Distributed table, grouped by shard with replica hostnames and ports; "local" badge on the connected node
+- **Storage Policy** — shows which storage policy the table uses (e.g. `default`, `ssd_in_order`)
 - **Linked replicated table** metadata: partition key, sort key, TTL (extracted from `CREATE TABLE` DDL)
 - **Schema section** — lazy-loaded column list with types, defaults, comments (fetched on expand)
 - **Orphaned replicated tables** shown as secondary cards when no Distributed table links to them
@@ -390,6 +395,26 @@ Click 📋 on a cluster header to copy the full cluster detail as JSON — inclu
 
 ---
 
+### Hosts
+`clusterAllReplicas(system.asynchronous_metrics)` + `clusterAllReplicas(system.metrics)` + `clusterAllReplicas(system.disks)` + `clusterAllReplicas(system.tables)` + `system.storage_policies`.
+
+Per-host infrastructure view showing every node in the cluster, grouped by shard.
+
+- **Host cards** — expandable cards for each node showing:
+  - **CPU** — core count and load average (1m, 5m)
+  - **Memory** — total, available, usage percentage with colour coding
+  - **Uptime** — formatted as days/hours/minutes
+  - **Open files** — combined read + write file handles
+  - **Disks** — per-disk usage bars with free/total space and mount paths
+  - **Tables** — lazy-loaded searchable list of all user tables on the host, grouped by database, with engine type, row count, and size
+- **Storage Policies** — collapsible cluster-wide section showing all configured policies with volumes, disk lists, volume type (e.g. JBOD), and balancing strategy (e.g. ROUND_ROBIN)
+- **Shard/Replica badge** — each host shows its shard and replica number (e.g. `S1 R2`)
+- **Search** — filter hosts by hostname
+- **Pin** — pin hosts to the top (persisted in `localStorage`)
+- **Summary stats** — memory usage, CPU cores, and table count visible in collapsed header
+
+---
+
 ### About drawer
 Click the **About** button (top-right of the tab bar) on any tab to open a contextual help drawer. For each tab it shows:
 - What the view is and where the data comes from
@@ -423,7 +448,7 @@ npm run format       # Prettier format
 | `Alt+1` – `Alt+9` | Switch to tab 1–9 |
 | `Alt+0` | Switch to tab 10 (Query Docs) |
 
-Tab order: Topology (1), Tables (2), Replication (3), ZooKeeper (4), Health (5), Query Log (6), Parts (7), Processes (8), Mutations (9), Query Docs (0).
+Tab order: Topology (1), Tables (2), Replication (3), ZooKeeper (4), Health (5), Query Log (6), Parts (7), Processes (8), Mutations (9), Hosts (0). Query Docs is accessible via tab bar only.
 
 ---
 

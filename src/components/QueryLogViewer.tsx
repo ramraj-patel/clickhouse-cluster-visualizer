@@ -963,10 +963,10 @@ export function QueryLogViewer({ config, filterQueryId, onClearFilter }: Props) 
           <option value={200}>200 rows</option>
           <option value={500}>500 rows</option>
         </select>
-        <div className={`flex items-center gap-1.5 border rounded-lg px-3 py-1.5 flex-1 min-w-32 transition-colors ${searchFilter ? 'border-ch-accent/40 bg-ch-accent/5' : 'border-ch-border bg-ch-bg'}`}>
+        <div className={`flex items-center gap-1.5 border rounded-lg px-3 py-1.5 flex-1 basis-0 min-w-0 transition-colors ${searchFilter ? 'border-ch-accent/40 bg-ch-accent/5' : 'border-ch-border bg-ch-bg'}`}>
           <input
             type="text"
-            placeholder="Search query text (Enter to apply)…"
+            placeholder="Search query text (Enter)…"
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') applySearch() }}
@@ -979,7 +979,7 @@ export function QueryLogViewer({ config, filterQueryId, onClearFilter }: Props) 
             </button>
           )}
         </div>
-        <div className={`flex items-center gap-1.5 border rounded-lg px-3 py-1.5 min-w-48 transition-colors ${queryIdFilter ? 'border-blue-400/40 bg-blue-400/5' : 'border-ch-border bg-ch-bg'}`}>
+        <div className={`flex items-center gap-1.5 border rounded-lg px-3 py-1.5 flex-1 basis-0 min-w-0 transition-colors ${queryIdFilter ? 'border-blue-400/40 bg-blue-400/5' : 'border-ch-border bg-ch-bg'}`}>
           <input
             type="text"
             placeholder="Query ID / trace-id (LIKE)…"

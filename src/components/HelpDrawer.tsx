@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { X, ChevronDown, ChevronRight, Database, GitBranch, Activity, TreePine, BarChart3, BookOpen, FileText, HardDrive, Terminal, Wrench } from 'lucide-react'
+import { X, ChevronDown, ChevronRight, Database, GitBranch, Activity, TreePine, BarChart3, BookOpen, FileText, HardDrive, Terminal, Wrench, Server } from 'lucide-react'
 import type { ActiveTab } from '../types'
 
 interface Query {
@@ -515,6 +515,40 @@ ORDER BY elapsed DESC`,
 FROM system.mutations
 ORDER BY create_time DESC
 LIMIT 200`,
+      },
+    ],
+  },
+
+  hosts: {
+    icon: <Server className="w-4 h-4" />,
+    title: 'Hosts',
+    description:
+      'Per-host view of every node in the cluster. Shows hardware resources (CPU, memory, disk), file descriptors, table counts, and shard/replica assignment. Data is fetched via clusterAllReplicas() queries across all nodes.',
+    significance: [
+      'Memory and disk usage are the most common causes of ClickHouse instability — monitor both per host.',
+      'File descriptor exhaustion (open FDs near max) can cause query failures and connection drops.',
+      'Uneven table counts across hosts may indicate replication lag or failed schema migrations.',
+    ],
+    signals: [
+      { label: 'Memory > 95%', meaning: 'Host at risk of OOM — queries may be killed', severity: 'danger' as const },
+      { label: 'Disk > 85%', meaning: 'Disk pressure — merges and inserts may slow down', severity: 'warn' as const },
+      { label: 'FDs > 80% of max', meaning: 'File descriptor exhaustion risk — increase ulimit', severity: 'warn' as const },
+      { label: 'Load average > CPU cores', meaning: 'Host is CPU-saturated — queries will queue', severity: 'warn' as const },
+    ],
+    queries: [
+      {
+        label: 'clusterAllReplicas — host system metrics',
+        sql: `SELECT hostname() AS host, metric, value
+FROM clusterAllReplicas('cluster', system.asynchronous_metrics)
+WHERE metric IN ('Uptime','OSMemoryTotal','OSMemoryAvailable',
+  'NumberOfPhysicalCPUCores','LoadAverage1','LoadAverage5',
+  'OpenFileDescriptorCount','MaxFileDescriptorCount')`,
+      },
+      {
+        label: 'clusterAllReplicas — host disk usage',
+        sql: `SELECT hostname() AS host, name, path, type,
+  free_space, total_space
+FROM clusterAllReplicas('cluster', system.disks)`,
       },
     ],
   },

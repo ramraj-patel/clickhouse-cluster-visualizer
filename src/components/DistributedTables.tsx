@@ -1,15 +1,16 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Database, ChevronDown, ChevronRight, Share2,
+  Database, ChevronDown, ChevronRight, Share2, Server,
   Layers, Tag, ArrowUpDown, Calendar, Hash, FileText, Search, Pin, PinOff,
 } from 'lucide-react'
 import { fetchTableColumns } from '../api/clickhouse'
 import { usePinnedTables } from '../hooks/usePinnedTables'
-import type { ConnectionConfig, DistributedTable, ColumnInfo } from '../types'
+import type { ConnectionConfig, DistributedTable, ClusterNode, ColumnInfo } from '../types'
 
 interface Props {
   tables: DistributedTable[]
+  clusters: ClusterNode[]
   config: ConnectionConfig
 }
 
@@ -110,12 +111,13 @@ function MetaPill({ icon, label, value }: { icon: React.ReactNode; label: string
 interface CardProps {
   dist: DistributedTable
   replicatedTable: DistributedTable | null
+  clusters: ClusterNode[]
   config: ConnectionConfig
   pinned: boolean
   onTogglePin: () => void
 }
 
-function DistributedCard({ dist, replicatedTable, config, pinned, onTogglePin }: CardProps) {
+function DistributedCard({ dist, replicatedTable, clusters, config, pinned, onTogglePin }: CardProps) {
   const [open, setOpen] = useState(false)
   const [schemaOpen, setSchemaOpen] = useState(false)
 
@@ -227,6 +229,46 @@ function DistributedCard({ dist, replicatedTable, config, pinned, onTogglePin }:
               </div>
             </div>
           </div>
+
+          {/* Shard → Hosts mapping */}
+          {distConfig && (() => {
+            const shardNodes = clusters.filter(c => c.cluster === distConfig.cluster)
+            if (shardNodes.length === 0) return null
+            const shards = new Map<number, ClusterNode[]>()
+            for (const n of shardNodes) {
+              const list = shards.get(n.shard_num) ?? []
+              list.push(n)
+              shards.set(n.shard_num, list)
+            }
+            return (
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-ch-muted font-semibold mb-2">
+                  Shard Topology ({shards.size} {shards.size === 1 ? 'shard' : 'shards'})
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {[...shards.entries()].sort((a, b) => a[0] - b[0]).map(([shardNum, replicas]) => (
+                    <div key={shardNum} className="bg-ch-bg/60 border border-ch-border/50 rounded-lg px-3 py-2">
+                      <div className="text-[10px] uppercase tracking-wider text-ch-muted font-medium mb-1.5">
+                        Shard {shardNum}
+                      </div>
+                      <div className="space-y-1">
+                        {replicas.sort((a, b) => a.replica_num - b.replica_num).map(r => (
+                          <div key={`${r.host_name}:${r.port}`} className="flex items-center gap-1.5 text-xs">
+                            <Server className="w-3 h-3 text-ch-muted flex-shrink-0" />
+                            <span className="font-mono text-ch-text">{r.host_name}</span>
+                            <span className="text-ch-muted">:{r.port}</span>
+                            {r.is_local === 1 && (
+                              <span className="text-[9px] bg-green-500/15 text-green-400 border border-green-500/25 px-1 rounded">local</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Schema */}
           <div>
@@ -357,7 +399,7 @@ function SearchBar({ value, onChange, total }: { value: string; onChange: (v: st
 
 // ── Main component ─────────────────────────────────────────────────────────
 
-export function DistributedTables({ tables, config }: Props) {
+export function DistributedTables({ tables, clusters, config }: Props) {
   const [search, setSearch] = useState('')
   const { isPinned, toggle } = usePinnedTables()
 
@@ -424,7 +466,7 @@ export function DistributedTables({ tables, config }: Props) {
     const key = `${dist.database}.${dist.name}`
     return (
       <DistributedCard
-        key={key} dist={dist} replicatedTable={linked} config={config}
+        key={key} dist={dist} replicatedTable={linked} clusters={clusters} config={config}
         pinned={isPinned(key)} onTogglePin={() => toggle(key)}
       />
     )

@@ -24,6 +24,8 @@ import type {
   MutationRow,
   DiskRow,
   ServerErrorRow,
+  HostInfoRow,
+  HostDiskRow,
 } from '../types'
 
 /** Safely coerce unknown (possibly string) UInt64 from ClickHouse JSON to number */
@@ -531,6 +533,105 @@ export async function fetchDiskHealth(config: ConnectionConfig): Promise<DiskRow
       keep_free_space
     FROM system.disks
     ORDER BY used_fraction DESC
+  `)
+}
+
+// ── Per-host info (cross-shard) ─────────────────────────────────────────────
+
+export async function fetchHostInfo(
+  config: ConnectionConfig,
+  clusterName: string
+): Promise<HostInfoRow[]> {
+  return runQuery<HostInfoRow>(config, `
+    SELECT
+      a.host                  AS host,
+      a.shard_num             AS shard_num,
+      0                       AS replica_num,
+      a.uptime                AS uptime,
+      a.os_memory_total       AS os_memory_total,
+      a.os_memory_available   AS os_memory_available,
+      a.cpu_cores             AS cpu_cores,
+      a.load_average_1m       AS load_average_1m,
+      a.load_average_5m       AS load_average_5m,
+      m.open_files            AS open_file_descriptors,
+      0                       AS max_file_descriptors,
+      0                       AS table_count
+    FROM (
+      SELECT
+        hostname()                                             AS host,
+        _shard_num                                             AS shard_num,
+        maxIf(value, metric = 'Uptime')                        AS uptime,
+        maxIf(value, metric = 'OSMemoryTotal')                 AS os_memory_total,
+        maxIf(value, metric = 'OSMemoryAvailable')             AS os_memory_available,
+        toUInt32(countIf(metric LIKE 'CPUFrequencyMHz_%'))     AS cpu_cores,
+        maxIf(value, metric = 'LoadAverage1')                  AS load_average_1m,
+        maxIf(value, metric = 'LoadAverage5')                  AS load_average_5m
+      FROM clusterAllReplicas('${esc(clusterName)}', system.asynchronous_metrics)
+      WHERE metric IN ('Uptime', 'OSMemoryTotal', 'OSMemoryAvailable', 'LoadAverage1', 'LoadAverage5')
+         OR metric LIKE 'CPUFrequencyMHz_%'
+      GROUP BY host, _shard_num
+    ) a
+    LEFT JOIN (
+      SELECT
+        hostname()                                             AS host,
+        _shard_num                                             AS shard_num,
+        sumIf(value, metric IN ('OpenFileForRead', 'OpenFileForWrite')) AS open_files
+      FROM clusterAllReplicas('${esc(clusterName)}', system.metrics)
+      WHERE metric IN ('OpenFileForRead', 'OpenFileForWrite')
+      GROUP BY host, _shard_num
+    ) m ON a.host = m.host AND a.shard_num = m.shard_num
+    ORDER BY a.shard_num, a.host
+  `)
+}
+
+export async function fetchHostDisks(
+  config: ConnectionConfig,
+  clusterName: string
+): Promise<HostDiskRow[]> {
+  return runQuery<HostDiskRow>(config, `
+    SELECT
+      hostname()                                     AS host,
+      name                                           AS disk_name,
+      path                                           AS disk_path,
+      type                                           AS disk_type,
+      free_space,
+      total_space,
+      if(total_space > 0, (total_space - free_space) / total_space, 0) AS used_fraction
+    FROM clusterAllReplicas('${esc(clusterName)}', system.disks)
+    ORDER BY host, disk_name
+  `)
+}
+
+export async function fetchHostTableCounts(
+  config: ConnectionConfig,
+  clusterName: string
+): Promise<{ host: string; table_count: number }[]> {
+  return runQuery<{ host: string; table_count: number }>(config, `
+    SELECT
+      hostname()       AS host,
+      count()          AS table_count
+    FROM clusterAllReplicas('${esc(clusterName)}', system.tables)
+    WHERE database NOT IN ('system', 'INFORMATION_SCHEMA', 'information_schema')
+    GROUP BY host
+    ORDER BY host
+  `)
+}
+
+export async function fetchHostTables(
+  config: ConnectionConfig,
+  clusterName: string
+): Promise<{ host: string; database: string; name: string; engine: string; total_rows: number; total_bytes: number }[]> {
+  return runQuery(config, `
+    SELECT
+      hostname()     AS host,
+      database,
+      name,
+      engine,
+      total_rows,
+      total_bytes
+    FROM clusterAllReplicas('${esc(clusterName)}', system.tables)
+    WHERE database NOT IN ('system', 'INFORMATION_SCHEMA', 'information_schema')
+    ORDER BY host, database, name
   `)
 }
 

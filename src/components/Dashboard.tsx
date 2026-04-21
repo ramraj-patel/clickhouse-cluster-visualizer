@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react'
 import {
   RefreshCw, LogOut, Activity, Database, GitBranch, TreePine,
   BarChart3, AlertCircle, ChevronDown, BookOpen, HelpCircle,
-  FileText, HardDrive, Terminal, Wrench, HardDriveDownload,
+  FileText, HardDrive, Terminal, Wrench, HardDriveDownload, Server,
 } from 'lucide-react'
 import { useClusterData } from '../hooks/useClusterData'
 import { ClusterTopology } from './ClusterTopology'
@@ -16,6 +16,7 @@ import { QueryLogViewer } from './QueryLogViewer'
 import { PartsInspector } from './PartsInspector'
 import { ProcessMonitor } from './ProcessMonitor'
 import { MutationsTracker } from './MutationsTracker'
+import { HostsPanel } from './HostsPanel'
 import { ErrorBoundary } from './ErrorBoundary'
 import { useUrlState } from '../hooks/useUrlState'
 import { safeNum } from '../api/clickhouse'
@@ -37,6 +38,7 @@ const TABS: { id: ActiveTab; label: string; icon: React.ReactNode }[] = [
   { id: 'parts',       label: 'Parts',       icon: <HardDrive  className="w-4 h-4" /> },
   { id: 'processes',   label: 'Processes',   icon: <Terminal   className="w-4 h-4" /> },
   { id: 'mutations',   label: 'Mutations',   icon: <Wrench     className="w-4 h-4" /> },
+  { id: 'hosts',       label: 'Hosts',       icon: <Server     className="w-4 h-4" /> },
   { id: 'docs',        label: 'Query Docs',  icon: <BookOpen   className="w-4 h-4" /> },
 ]
 
@@ -280,7 +282,7 @@ export function Dashboard({ config, version, onDisconnect }: Props) {
             </div>
           </ErrorBoundary>
         )}
-        {tab === 'tables'      && <ErrorBoundary label="Tables tab"><DistributedTables tables={filteredTables} config={config} /></ErrorBoundary>}
+        {tab === 'tables'      && <ErrorBoundary label="Tables tab"><DistributedTables tables={filteredTables} clusters={clusters} config={config} /></ErrorBoundary>}
         {tab === 'replication' && <ErrorBoundary label="Replication tab"><ReplicationStatus replicas={filteredReplicas} queue={filteredQueue} /></ErrorBoundary>}
         {tab === 'zookeeper'   && <ErrorBoundary label="ZooKeeper tab"><ZookeeperNodes config={config} replicas={filteredReplicas} /></ErrorBoundary>}
         {tab === 'health'      && (
@@ -313,6 +315,7 @@ export function Dashboard({ config, version, onDisconnect }: Props) {
           </ErrorBoundary>
         )}
         {tab === 'mutations'   && <ErrorBoundary label="Mutations tab"><MutationsTracker config={config} /></ErrorBoundary>}
+        {tab === 'hosts'       && <ErrorBoundary label="Hosts tab"><HostsPanel clusters={clusters} config={config} /></ErrorBoundary>}
         {tab === 'docs'        && <ErrorBoundary label="Query Docs tab"><QueryDocs /></ErrorBoundary>}
       </main>
     </div>

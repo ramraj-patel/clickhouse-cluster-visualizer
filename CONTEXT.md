@@ -62,7 +62,7 @@ cluster-visualizer/
 │   └── QUERIES.md                # SQL reference — keep in sync with clickhouse.ts
 └── src/
     ├── main.tsx                  # ReactDOM.createRoot → App, wrapped in top-level ErrorBoundary
-    ├── App.tsx                   # Connection gate: ConnectionForm | Dashboard
+    ├── App.tsx                   # Connection gate: ConnectionForm | Dashboard; sessionStorage persistence
     ├── index.css                 # Global styles
     ├── api/
     │   └── clickhouse.ts         # All typed query functions (source of truth for SQL)
@@ -88,7 +88,7 @@ cluster-visualizer/
     │       └── safeNum.test.ts   # 9 tests for safeNum coercion
     └── components/
         ├── ConnectionForm.tsx
-        ├── Dashboard.tsx         # 10 tabs, db filter, header stats + disk/error badges, Alt+1–9 shortcuts
+        ├── Dashboard.tsx         # 11 tabs, db filter, header stats + disk/error badges, Alt+1–9 shortcuts
         ├── ErrorBoundary.tsx     # React class error boundary — per-tab + root-level
         ├── ClusterTopology.tsx   # React Flow graph + NodeDrillDownPanel + RoutingPanel
         ├── DistributedTables.tsx
@@ -99,8 +99,9 @@ cluster-visualizer/
         ├── PartsInspector.tsx    # 3-level drill-down, active merges banner, part history
         ├── ProcessMonitor.tsx    # Live processes, 5s refresh, "View in Log" cross-link
         ├── MutationsTracker.tsx  # Mutation status, fail reason, parts_to_do countdown
+        ├── HostsPanel.tsx        # Per-host view: CPU, memory, disks, tables, FDs, shard assignment
         ├── QueryDocs.tsx         # Renders docs/QUERIES.md?raw
-        └── HelpDrawer.tsx        # Record<ActiveTab, TabHelp> — all 10 tabs covered
+        └── HelpDrawer.tsx        # Record<ActiveTab, TabHelp> — all 11 tabs covered
 ```
 
 ---
@@ -171,6 +172,10 @@ Every function signature: `fn(config: ConnectionConfig, ...args): Promise<T[]>`
 | `fetchMutations` | `system.mutations` | `MutationRow[]` | LIMIT 200, 30s |
 | `fetchDiskHealth` | `system.disks` | `DiskRow[]` | Header badge, 30s |
 | `fetchServerErrors` | `system.errors` | `ServerErrorRow[]` | Header badge, WHERE value>0, 30s |
+| `fetchHostInfo` | `clusterAllReplicas(system.asynchronous_metrics + system.metrics)` | `HostInfoRow[]` | CPU, memory, uptime, load, open files per host |
+| `fetchHostDisks` | `clusterAllReplicas(system.disks)` | `HostDiskRow[]` | Disk partitions per host |
+| `fetchHostTableCounts` | `clusterAllReplicas(system.tables)` | `{host, table_count}[]` | User table count per host |
+| `fetchHostTables` | `clusterAllReplicas(system.tables)` | `{host, database, name, engine, total_rows, total_bytes}[]` | Full table list per host |
 | `safeNum` | — | `number` | Coerces UInt64 strings safely (helper, not a fetch fn) |
 
 ---
@@ -210,7 +215,7 @@ Every function signature: `fn(config: ConnectionConfig, ...args): Promise<T[]>`
 
 ### usePinnedTables(storageKey)
 - Generic localStorage persistence for a Set<string>
-- Three separate storage keys in use: `ch-pinned-tables`, `ch-pinned-replicas`, `ch-pinned-zk`
+- Four separate storage keys in use: `ch-pinned-tables`, `ch-pinned-replicas`, `ch-pinned-zk`, `ch-pinned-hosts`
 - **Versioned schema**: stores `{ v: 1, keys: string[] }` envelope; migrates legacy bare arrays transparently; clears and returns empty set for unknown versions
 
 ---
@@ -218,7 +223,7 @@ Every function signature: `fn(config: ConnectionConfig, ...args): Promise<T[]>`
 ## Components
 
 ### Dashboard.tsx
-Central shell. 10 tabs: `topology`, `tables`, `replication`, `zookeeper`, `health`, `query-log`, `parts`, `processes`, `mutations`, `docs`.
+Central shell. 11 tabs: `topology`, `tables`, `replication`, `zookeeper`, `health`, `query-log`, `parts`, `processes`, `mutations`, `hosts`, `docs`.
 Owns: tab state (persisted in URL hash via `useUrlState`), db filter dropdown, header stats, disk/error badge signals, `queryFilter` state.
 `queryFilter` + `handleViewInLog(queryId)` implement the Process Monitor → Query Log cross-link.
 Tab bar: `overflow-x-auto` to handle 10 tabs on narrow screens.
@@ -235,7 +240,7 @@ Layout: 2 clusters per row. Props include `tables` and `config` for drill-down a
 Routing overlay: animated gold dashed edges from cluster → shards proportional to shard_weight.
 
 ### DistributedTables.tsx
-Two card types: `DistributedCard` (parses engine_full regex for cluster/db/table/shardKey) and `ReplicatedCard` (orphan replicated tables). Lazy schema loading via `fetchTableColumns`.
+Two card types: `DistributedCard` (parses engine_full regex for cluster/db/table/shardKey) and `ReplicatedCard` (orphan replicated tables). Lazy schema loading via `fetchTableColumns`. **Shard Topology section** in each Distributed card shows which hosts/shards serve the table (client-side join of `clusters` data by cluster name).
 
 ### ReplicationStatus.tsx
 Per-table health cards. Queue type badges: GET_PART, MERGE_PARTS, DROP_RANGE, MUTATE_PART, ATTACH_PART, MOVE_PART. Health: healthy / degraded / down derived from replica fields.
@@ -286,6 +291,9 @@ interface MetricDef {
 | Replication | ReplicasMaxAbsoluteDelay ≥ 300 | lag ≥ 60 OR ReplicasSumInsertsInQueue ≥ 50 |
 | Storage | any disk used_fraction ≥ 0.95 | any disk used_fraction ≥ 0.85 |
 
+### HostsPanel.tsx
+Per-host infrastructure view. Shows all cluster nodes grouped by shard. Each host card displays: CPU cores (derived from `CPUFrequencyMHz_*` count), memory (total/available), uptime, load average, open files (read+write from `system.metrics`), disk partitions with usage bars, and a lazy-loaded searchable table list. Supports search by hostname and pin-to-top (`ch-pinned-hosts` localStorage key). Data fetched via 3 `clusterAllReplicas()` queries + 1 on-demand table list query.
+
 ### ErrorBoundary.tsx
 React class component. Catches JS errors in descendant render and shows a fallback error card instead of crashing the full app.
 Props: `label` (shown in fallback), `fallback` (custom fallback node), `onError` (error callback).
@@ -332,7 +340,7 @@ Stateless. Imports `docs/QUERIES.md?raw` via Vite raw import, renders with React
 
 ### HelpDrawer.tsx
 `HELP` typed as `Record<ActiveTab, TabHelp>` — TypeScript compile error if any tab is missing.
-Covers all 10 tabs. Each entry has: icon, title, description, significance[], signals[], queries[].
+Covers all 11 tabs. Each entry has: icon, title, description, significance[], signals[], queries[].
 The `health` key covers: status pill derivation, alert panel behaviour, per-shard traffic (clusterAllReplicas SQL), metric drawer usage, all three system table sources.
 `SqlBlock` sub-component: collapsible SQL display.
 
@@ -344,7 +352,7 @@ The `health` key covers: status pill derivation, alert panel behaviour, per-shar
 type ActiveTab =
   | 'topology' | 'tables' | 'replication' | 'zookeeper' | 'health'
   | 'query-log' | 'parts' | 'processes' | 'mutations'
-  | 'docs'
+  | 'hosts' | 'docs'
 ```
 
 Note: was `'metrics'` before the Health Dashboard redesign — renamed to `'health'`.
@@ -384,6 +392,8 @@ Dark theme only. No light mode.
 | ZK connections | 30s | 15s | inside `ZookeeperNodes` |
 | ZK tree nodes | On-demand | 30s | inside `ZookeeperNodes` |
 | Table columns | On-demand | 60s | inside `DistributedTables` |
+| Host info, disks, table counts | 30s | 30s | inside `HostsPanel` (clusterAllReplicas) |
+| Host table list | On-demand | 60s | inside `HostsPanel` (lazy on expand) |
 
 ---
 
@@ -437,6 +447,9 @@ The ZK connections fetch gracefully handles 404 (older versions) by returning em
 | Disk health signals | `system.disks` | **Built** — header badge, warns at 85%, critical at 95% |
 | Server error signals | `system.errors` | **Built** — header badge with error type count |
 | Health Dashboard | `system.metrics`, `system.events`, `system.asynchronous_metrics`, `clusterAllReplicas(system.metrics)` | **Built** — status bar, alerts, cluster health, per-shard traffic, metric detail drawer |
+| Host infrastructure view | `clusterAllReplicas(system.asynchronous_metrics, system.metrics, system.disks, system.tables)` | **Built** — per-host CPU, memory, disks, tables, FDs, shard assignment; search + pin |
+| Shard topology in Tables tab | `system.clusters` (client-side join) | **Built** — shows shard→host mapping per Distributed table |
+| Session persistence | sessionStorage | **Built** — connection config survives page refresh, clears on tab close |
 | Error boundaries | — | **Built** — per-tab + root-level; tab crashes isolated |
 | URL hash state | — | **Built** — active tab in `#tab=...`, survives reload, shareable |
 | Keyboard shortcuts | — | **Built** — Alt+1–9 for tab navigation |
@@ -496,4 +509,4 @@ Exposed port: 3001
 
 ---
 
-*Last updated: 2026-03-11 — Gap analysis complete. Security hardening, error boundaries, URL hash state, keyboard shortcuts, polling backoff, localStorage versioning, LIMIT warnings, SQL escaping fix, DX tooling (ESLint + Prettier + Vitest). Tabs: topology, tables, replication, zookeeper, health, query-log, parts, processes, mutations, docs.*
+*Last updated: 2026-04-21 — Added Hosts tab (per-host CPU, memory, disks, tables, FDs via clusterAllReplicas), shard topology in Tables tab, session persistence for connection config. Tabs: topology, tables, replication, zookeeper, health, query-log, parts, processes, mutations, hosts, docs.*

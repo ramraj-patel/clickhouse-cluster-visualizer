@@ -941,6 +941,158 @@ Returns error types that have occurred at least once since server start, ordered
 
 ---
 
+## 21. Host System Info (Cross-Shard)
+
+**Function:** `fetchHostInfo`
+**Trigger:** Hosts tab active, 30s refresh
+
+```sql
+SELECT
+  a.host, a.shard_num, 0 AS replica_num,
+  a.uptime, a.os_memory_total, a.os_memory_available,
+  a.cpu_cores, a.load_average_1m, a.load_average_5m,
+  m.open_files AS open_file_descriptors,
+  0 AS max_file_descriptors, 0 AS table_count
+FROM (
+  SELECT
+    hostname() AS host, _shard_num AS shard_num,
+    maxIf(value, metric = 'Uptime') AS uptime,
+    maxIf(value, metric = 'OSMemoryTotal') AS os_memory_total,
+    maxIf(value, metric = 'OSMemoryAvailable') AS os_memory_available,
+    toUInt32(countIf(metric LIKE 'CPUFrequencyMHz_%')) AS cpu_cores,
+    maxIf(value, metric = 'LoadAverage1') AS load_average_1m,
+    maxIf(value, metric = 'LoadAverage5') AS load_average_5m
+  FROM clusterAllReplicas('{cluster}', system.asynchronous_metrics)
+  WHERE metric IN ('Uptime','OSMemoryTotal','OSMemoryAvailable','LoadAverage1','LoadAverage5')
+     OR metric LIKE 'CPUFrequencyMHz_%'
+  GROUP BY host, _shard_num
+) a
+LEFT JOIN (
+  SELECT
+    hostname() AS host, _shard_num AS shard_num,
+    sumIf(value, metric IN ('OpenFileForRead','OpenFileForWrite')) AS open_files
+  FROM clusterAllReplicas('{cluster}', system.metrics)
+  WHERE metric IN ('OpenFileForRead','OpenFileForWrite')
+  GROUP BY host, _shard_num
+) m ON a.host = m.host AND a.shard_num = m.shard_num
+ORDER BY a.shard_num, a.host
+```
+
+**Purpose:**
+Aggregates per-host system metrics across all cluster nodes using `clusterAllReplicas()`. CPU core count is derived from the number of `CPUFrequencyMHz_*` metrics (one per physical core). Open file count comes from `system.metrics` (not `system.asynchronous_metrics`).
+
+**Output columns:**
+
+| Column                 | Type    | Description                                          |
+|------------------------|---------|------------------------------------------------------|
+| `host`                 | String  | Hostname reported by `hostname()`                    |
+| `shard_num`            | UInt32  | Shard number within the cluster                      |
+| `uptime`               | Float64 | Server uptime in seconds                             |
+| `os_memory_total`      | UInt64  | Total OS memory in bytes                             |
+| `os_memory_available`  | UInt64  | Available OS memory in bytes                         |
+| `cpu_cores`            | UInt32  | Number of physical CPU cores                         |
+| `load_average_1m`      | Float64 | 1-minute load average                                |
+| `load_average_5m`      | Float64 | 5-minute load average                                |
+| `open_file_descriptors`| UInt64  | Open files (read + write handles)                    |
+
+---
+
+## 22. Host Disk Usage (Cross-Shard)
+
+**Function:** `fetchHostDisks`
+**Trigger:** Hosts tab active, 30s refresh
+
+```sql
+SELECT
+  hostname()                                     AS host,
+  name                                           AS disk_name,
+  path                                           AS disk_path,
+  type                                           AS disk_type,
+  free_space,
+  total_space,
+  if(total_space > 0, (total_space - free_space) / total_space, 0) AS used_fraction
+FROM clusterAllReplicas('{cluster}', system.disks)
+ORDER BY host, disk_name
+```
+
+**Purpose:**
+Returns disk partition details for every node in the cluster. Shows disk name, mount path, type (local/s3/etc.), free and total space, and computed usage fraction.
+
+**Output columns:**
+
+| Column          | Type    | Description                                  |
+|-----------------|---------|----------------------------------------------|
+| `host`          | String  | Hostname                                     |
+| `disk_name`     | String  | Disk name (e.g. `default`)                   |
+| `disk_path`     | String  | Mount path                                   |
+| `disk_type`     | String  | Disk type (`local`, `s3`, etc.)              |
+| `free_space`    | UInt64  | Free space in bytes                          |
+| `total_space`   | UInt64  | Total space in bytes                         |
+| `used_fraction` | Float64 | Fraction used (0.0–1.0)                      |
+
+---
+
+## 23. Host Table Counts (Cross-Shard)
+
+**Function:** `fetchHostTableCounts`
+**Trigger:** Hosts tab active, 30s refresh
+
+```sql
+SELECT
+  hostname()       AS host,
+  count()          AS table_count
+FROM clusterAllReplicas('{cluster}', system.tables)
+WHERE database NOT IN ('system', 'INFORMATION_SCHEMA', 'information_schema')
+GROUP BY host
+ORDER BY host
+```
+
+**Purpose:**
+Returns the number of user tables per host, excluding system databases.
+
+**Output columns:**
+
+| Column        | Type   | Description                     |
+|---------------|--------|---------------------------------|
+| `host`        | String | Hostname                        |
+| `table_count` | UInt64 | Number of user tables on host   |
+
+---
+
+## 24. Host Table List (Cross-Shard)
+
+**Function:** `fetchHostTables`
+**Trigger:** On-demand (expand Tables section in Hosts tab)
+
+```sql
+SELECT
+  hostname()     AS host,
+  database,
+  name,
+  engine,
+  total_rows,
+  total_bytes
+FROM clusterAllReplicas('{cluster}', system.tables)
+WHERE database NOT IN ('system', 'INFORMATION_SCHEMA', 'information_schema')
+ORDER BY host, database, name
+```
+
+**Purpose:**
+Returns the full list of user tables per host with engine type and size. Used in the Hosts tab to show which tables exist on each node. Cached for 60s since it returns the same data for all hosts in a cluster.
+
+**Output columns:**
+
+| Column        | Type   | Description                              |
+|---------------|--------|------------------------------------------|
+| `host`        | String | Hostname                                 |
+| `database`    | String | Database name                            |
+| `name`        | String | Table name                               |
+| `engine`      | String | Table engine (e.g. `ReplicatedMergeTree`)|
+| `total_rows`  | UInt64 | Row count                                |
+| `total_bytes` | UInt64 | Size on disk in bytes                    |
+
+---
+
 ## Refresh Behaviour
 
 | Query group                                     | Interval   | Stale time | Notes |
@@ -953,6 +1105,8 @@ Returns error types that have occurred at least once since server start, ordered
 | Process Monitor                                 | 5 seconds  | 4 seconds  | Driven by `useProcesses`; live in-flight queries |
 | Mutations Tracker                               | 30 seconds | 15 seconds | Driven by `useMutations` |
 | Query Log                                       | On demand / optional auto-refresh | 30s | Auto-refresh disabled by default; user can enable with configurable interval |
+| Host info, disks, table counts (Hosts tab)          | 30 seconds | 30 seconds | Cross-shard via `clusterAllReplicas()` |
+| Host table list (Hosts tab)                         | On demand  | 60 seconds | Lazy-loaded on expand |
 | ZooKeeper connections (`system.zookeeper_connection`) | 30 seconds | 15 seconds | Stops retrying on 404 (ClickHouse < 22.6) |
 | ZooKeeper tree nodes (`system.zookeeper`)       | On demand  | 30 seconds | One query per node expansion; not auto-polled |
 

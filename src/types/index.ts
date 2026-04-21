@@ -174,10 +174,36 @@ export interface ReplicaView {
   replicaInfo?: ReplicaInfo[]
 }
 
+// Per-host info aggregated from clusterAllReplicas queries
+export interface HostInfoRow {
+  host: string
+  shard_num: number
+  replica_num: number
+  uptime: number
+  os_memory_total: number
+  os_memory_available: number
+  cpu_cores: number
+  load_average_1m: number
+  load_average_5m: number
+  open_file_descriptors: number
+  max_file_descriptors: number
+  table_count: number
+}
+
+export interface HostDiskRow {
+  host: string
+  disk_name: string
+  disk_path: string
+  disk_type: string
+  free_space: number
+  total_space: number
+  used_fraction: number
+}
+
 export type ActiveTab =
   | 'topology' | 'tables' | 'replication' | 'zookeeper' | 'health'
   | 'query-log' | 'parts' | 'processes' | 'mutations'
-  | 'docs'
+  | 'hosts' | 'docs'
 
 // ── system.query_log ─────────────────────────────────────────────────────────
 

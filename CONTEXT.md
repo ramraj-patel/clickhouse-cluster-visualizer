@@ -172,6 +172,7 @@ Every function signature: `fn(config: ConnectionConfig, ...args): Promise<T[]>`
 | `fetchMutations` | `system.mutations` | `MutationRow[]` | LIMIT 200, 30s |
 | `fetchDiskHealth` | `system.disks` | `DiskRow[]` | Header badge, 30s |
 | `fetchServerErrors` | `system.errors` | `ServerErrorRow[]` | Header badge, WHERE value>0, 30s |
+| `fetchStoragePolicies` | `system.storage_policies` | `StoragePolicyRow[]` | Cluster-wide storage policies with volumes and disks |
 | `fetchHostInfo` | `clusterAllReplicas(system.asynchronous_metrics + system.metrics)` | `HostInfoRow[]` | CPU, memory, uptime, load, open files per host |
 | `fetchHostDisks` | `clusterAllReplicas(system.disks)` | `HostDiskRow[]` | Disk partitions per host |
 | `fetchHostTableCounts` | `clusterAllReplicas(system.tables)` | `{host, table_count}[]` | User table count per host |
@@ -240,7 +241,7 @@ Layout: 2 clusters per row. Props include `tables` and `config` for drill-down a
 Routing overlay: animated gold dashed edges from cluster → shards proportional to shard_weight.
 
 ### DistributedTables.tsx
-Two card types: `DistributedCard` (parses engine_full regex for cluster/db/table/shardKey) and `ReplicatedCard` (orphan replicated tables). Lazy schema loading via `fetchTableColumns`. **Shard Topology section** in each Distributed card shows which hosts/shards serve the table (client-side join of `clusters` data by cluster name).
+Two card types: `DistributedCard` (parses engine_full regex for cluster/db/table/shardKey) and `ReplicatedCard` (orphan replicated tables). Lazy schema loading via `fetchTableColumns`. **Shard Topology section** in each Distributed card shows which hosts/shards serve the table (client-side join of `clusters` data by cluster name). **Storage Policy** shown per table from `system.tables.storage_policy`.
 
 ### ReplicationStatus.tsx
 Per-table health cards. Queue type badges: GET_PART, MERGE_PARTS, DROP_RANGE, MUTATE_PART, ATTACH_PART, MOVE_PART. Health: healthy / degraded / down derived from replica fields.
@@ -292,7 +293,7 @@ interface MetricDef {
 | Storage | any disk used_fraction ≥ 0.95 | any disk used_fraction ≥ 0.85 |
 
 ### HostsPanel.tsx
-Per-host infrastructure view. Shows all cluster nodes grouped by shard. Each host card displays: CPU cores (derived from `CPUFrequencyMHz_*` count), memory (total/available), uptime, load average, open files (read+write from `system.metrics`), disk partitions with usage bars, and a lazy-loaded searchable table list. Supports search by hostname and pin-to-top (`ch-pinned-hosts` localStorage key). Data fetched via 3 `clusterAllReplicas()` queries + 1 on-demand table list query.
+Per-host infrastructure view. Shows all cluster nodes grouped by shard. Each host card displays: CPU cores (derived from `CPUFrequencyMHz_*` count), memory (total/available), uptime, load average, open files (read+write from `system.metrics`), disk partitions with usage bars, and a lazy-loaded searchable table list. Supports search by hostname and pin-to-top (`ch-pinned-hosts` localStorage key). Data fetched via 3 `clusterAllReplicas()` queries + 1 on-demand table list query. **Storage Policies section** at top shows cluster-wide policies with volumes, disks, and balancing strategy from `system.storage_policies`.
 
 ### ErrorBoundary.tsx
 React class component. Catches JS errors in descendant render and shows a fallback error card instead of crashing the full app.

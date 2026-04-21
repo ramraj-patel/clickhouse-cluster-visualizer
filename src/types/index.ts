@@ -67,6 +67,7 @@ export interface DistributedTable {
   primary_key: string
   total_rows: number | null
   total_bytes: number | null
+  storage_policy: string
 }
 
 // system.columns
@@ -198,6 +199,20 @@ export interface HostDiskRow {
   free_space: number
   total_space: number
   used_fraction: number
+}
+
+// system.storage_policies
+export interface StoragePolicyRow {
+  policy_name: string
+  volume_name: string
+  volume_priority: number
+  disks: string[]
+  volume_type: string
+  max_data_part_size: number
+  move_factor: number
+  prefer_not_to_merge: number
+  perform_ttl_move_on_insert: number
+  load_balancing: string
 }
 
 export type ActiveTab =

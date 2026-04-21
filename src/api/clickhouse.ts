@@ -26,6 +26,7 @@ import type {
   ServerErrorRow,
   HostInfoRow,
   HostDiskRow,
+  StoragePolicyRow,
 } from '../types'
 
 /** Safely coerce unknown (possibly string) UInt64 from ClickHouse JSON to number */
@@ -94,7 +95,7 @@ export async function fetchDistributedTables(config: ConnectionConfig): Promise<
     `SELECT
       database, name, engine, engine_full,
       create_table_query, partition_key, sorting_key, primary_key,
-      total_rows, total_bytes
+      total_rows, total_bytes, storage_policy
     FROM system.tables
     WHERE engine IN ('Distributed', 'ReplicatedMergeTree', 'ReplicatedReplacingMergeTree',
                      'ReplicatedAggregatingMergeTree', 'ReplicatedCollapsingMergeTree',
@@ -632,6 +633,18 @@ export async function fetchHostTables(
     FROM clusterAllReplicas('${esc(clusterName)}', system.tables)
     WHERE database NOT IN ('system', 'INFORMATION_SCHEMA', 'information_schema')
     ORDER BY host, database, name
+  `)
+}
+
+export async function fetchStoragePolicies(config: ConnectionConfig): Promise<StoragePolicyRow[]> {
+  return runQuery<StoragePolicyRow>(config, `
+    SELECT
+      policy_name, volume_name, volume_priority,
+      disks, volume_type, max_data_part_size,
+      move_factor, prefer_not_to_merge,
+      perform_ttl_move_on_insert, load_balancing
+    FROM system.storage_policies
+    ORDER BY policy_name, volume_priority
   `)
 }
 

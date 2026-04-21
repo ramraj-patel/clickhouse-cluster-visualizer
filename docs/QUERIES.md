@@ -1093,6 +1093,41 @@ Returns the full list of user tables per host with engine type and size. Used in
 
 ---
 
+## 25. Storage Policies
+
+**Function:** `fetchStoragePolicies`
+**Trigger:** Hosts tab active, staleTime 60s
+
+```sql
+SELECT
+  policy_name, volume_name, volume_priority,
+  disks, volume_type, max_data_part_size,
+  move_factor, prefer_not_to_merge,
+  perform_ttl_move_on_insert, load_balancing
+FROM system.storage_policies
+ORDER BY policy_name, volume_priority
+```
+
+**Purpose:**
+Returns all storage policies and their volumes/disks configuration. Shown in the Hosts tab as a collapsible cluster-wide section. Each table's `storage_policy` field references one of these policies.
+
+**Output columns:**
+
+| Column                       | Type     | Description                                          |
+|------------------------------|----------|------------------------------------------------------|
+| `policy_name`                | String   | Policy name (e.g. `default`, `ssd_in_order`)         |
+| `volume_name`                | String   | Volume within the policy                             |
+| `volume_priority`            | UInt64   | Priority order for volume selection                  |
+| `disks`                      | Array    | List of disk names in this volume                    |
+| `volume_type`                | String   | Volume type (e.g. `JBOD`)                            |
+| `max_data_part_size`         | UInt64   | Max part size for this volume (0 = unlimited)        |
+| `move_factor`                | Float64  | Free space ratio to trigger part moves               |
+| `prefer_not_to_merge`        | UInt8    | Whether to avoid merges on this volume               |
+| `perform_ttl_move_on_insert` | UInt8    | Move parts on insert based on TTL rules              |
+| `load_balancing`             | String   | Disk selection strategy (e.g. `ROUND_ROBIN`)         |
+
+---
+
 ## Refresh Behaviour
 
 | Query group                                     | Interval   | Stale time | Notes |

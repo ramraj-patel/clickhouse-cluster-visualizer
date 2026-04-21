@@ -4,9 +4,9 @@ import {
   Server, ChevronDown, ChevronRight, HardDrive, Cpu, MemoryStick,
   FileText, Search, Pin, PinOff, Clock, Layers, Database,
 } from 'lucide-react'
-import { fetchHostInfo, fetchHostDisks, fetchHostTableCounts, fetchHostTables } from '../api/clickhouse'
+import { fetchHostInfo, fetchHostDisks, fetchHostTableCounts, fetchHostTables, fetchStoragePolicies } from '../api/clickhouse'
 import { usePinnedTables } from '../hooks/usePinnedTables'
-import type { ConnectionConfig, ClusterNode, HostInfoRow, HostDiskRow } from '../types'
+import type { ConnectionConfig, ClusterNode, HostInfoRow, HostDiskRow, StoragePolicyRow } from '../types'
 
 interface Props {
   clusters: ClusterNode[]
@@ -363,6 +363,79 @@ function SearchBar({ value, onChange, total }: { value: string; onChange: (v: st
 
 // ── Main component ─────────────────────────────────────────────────────────
 
+// ── Storage Policies section ──────────────────────────────────────────────
+
+function StoragePoliciesSection({ config }: { config: ConnectionConfig }) {
+  const [open, setOpen] = useState(false)
+  const { data, isLoading } = useQuery({
+    queryKey: ['storage-policies', config],
+    queryFn: () => fetchStoragePolicies(config),
+    staleTime: 60_000,
+  })
+
+  if (isLoading || !data?.length) return null
+
+  const byPolicy = new Map<string, StoragePolicyRow[]>()
+  for (const row of data) {
+    const list = byPolicy.get(row.policy_name) ?? []
+    list.push(row)
+    byPolicy.set(row.policy_name, list)
+  }
+
+  return (
+    <div className="bg-ch-surface border border-ch-border rounded-xl overflow-hidden">
+      <button
+        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-ch-bg/30 transition-colors"
+        onClick={() => setOpen(o => !o)}
+      >
+        {open ? <ChevronDown className="w-4 h-4 text-ch-muted" /> : <ChevronRight className="w-4 h-4 text-ch-muted" />}
+        <HardDrive className="w-4 h-4 text-ch-accent" />
+        <span className="font-semibold text-ch-text text-sm">Storage Policies</span>
+        <span className="text-xs text-ch-muted">{byPolicy.size} {byPolicy.size === 1 ? 'policy' : 'policies'}</span>
+      </button>
+      {open && (
+        <div className="border-t border-ch-border px-4 py-4 space-y-4">
+          {[...byPolicy.entries()].map(([policyName, volumes]) => (
+            <div key={policyName} className="bg-ch-bg/60 border border-ch-border/50 rounded-lg px-4 py-3">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-sm font-semibold text-ch-text font-mono">{policyName}</span>
+                <span className="text-[10px] bg-ch-accent/15 text-ch-accent border border-ch-accent/25 px-1.5 py-0.5 rounded">
+                  {volumes.length} {volumes.length === 1 ? 'volume' : 'volumes'}
+                </span>
+              </div>
+              <div className="space-y-2">
+                {volumes.sort((a, b) => a.volume_priority - b.volume_priority).map(vol => (
+                  <div key={vol.volume_name} className="text-xs">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Layers className="w-3 h-3 text-ch-muted" />
+                      <span className="font-mono text-ch-text">{vol.volume_name}</span>
+                      <span className="text-[10px] text-ch-muted">priority {vol.volume_priority}</span>
+                      <span className="text-[10px] text-ch-muted">• {vol.volume_type}</span>
+                      <span className="text-[10px] text-ch-muted">• {vol.load_balancing}</span>
+                    </div>
+                    <div className="ml-5 flex flex-wrap gap-1.5">
+                      {(vol.disks as string[]).map(disk => (
+                        <span key={disk} className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded font-mono">
+                          {disk}
+                        </span>
+                      ))}
+                    </div>
+                    {vol.max_data_part_size > 0 && (
+                      <div className="ml-5 mt-1 text-[10px] text-ch-muted">
+                        Max part size: {formatBytes(Number(vol.max_data_part_size))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function HostsPanel({ clusters, config }: Props) {
   const [search, setSearch] = useState('')
   const { isPinned, toggle } = usePinnedTables('ch-pinned-hosts')
@@ -465,6 +538,8 @@ export function HostsPanel({ clusters, config }: Props) {
   return (
     <div className="space-y-6 p-4 max-w-5xl mx-auto">
       <SearchBar value={search} onChange={setSearch} total={hosts.length} />
+
+      <StoragePoliciesSection config={config} />
 
       {pinnedHosts.length > 0 && (
         <div>

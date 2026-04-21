@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Database, ChevronDown, ChevronRight, Share2, Server,
+  Database, ChevronDown, ChevronRight, Share2, Server, HardDrive,
   Layers, Tag, ArrowUpDown, Calendar, Hash, FileText, Search, Pin, PinOff,
 } from 'lucide-react'
 import { fetchTableColumns } from '../api/clickhouse'
@@ -223,6 +223,9 @@ function DistributedCard({ dist, replicatedTable, clusters, config, pinned, onTo
                 {ttl && (
                   <MetaPill icon={<FileText className="w-3.5 h-3.5" />} label="TTL" value={ttl} />
                 )}
+                {target.storage_policy && (
+                  <MetaPill icon={<HardDrive className="w-3.5 h-3.5" />} label="Storage Policy" value={target.storage_policy} />
+                )}
                 {!target.partition_key && !target.sorting_key && !ttl && (
                   <div className="text-xs text-ch-muted py-1.5">No metadata available</div>
                 )}
@@ -352,6 +355,9 @@ function ReplicatedCard({ table, config, pinned, onTogglePin }: { table: Distrib
             )}
             {ttl && (
               <MetaPill icon={<FileText className="w-3.5 h-3.5" />} label="TTL" value={ttl} />
+            )}
+            {table.storage_policy && (
+              <MetaPill icon={<HardDrive className="w-3.5 h-3.5" />} label="Storage Policy" value={table.storage_policy} />
             )}
           </div>
           <div>

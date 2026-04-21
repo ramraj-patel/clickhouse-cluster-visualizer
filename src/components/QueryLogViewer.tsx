@@ -174,6 +174,28 @@ function tryFormatSql(sql: string): string {
   }
 }
 
+function CopyableId({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false)
+  const handleCopy = () => {
+    navigator.clipboard.writeText(value)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="text-[10px] font-semibold text-ch-muted uppercase tracking-wider">{label}</span>
+      <span className="text-xs font-mono text-ch-text select-all">{value}</span>
+      <button
+        onClick={handleCopy}
+        className="text-ch-muted hover:text-ch-accent transition-colors p-0.5"
+        title={`Copy ${label}`}
+      >
+        {copied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+      </button>
+    </span>
+  )
+}
+
 function QueryDetailPanel({ row, config }: { row: QueryLogRow; config: ConnectionConfig }) {
   const [showThreads, setShowThreads] = useState(false)
   const [crossShardCluster, setCrossShardCluster] = useState<string | null>(null)
@@ -203,6 +225,17 @@ function QueryDetailPanel({ row, config }: { row: QueryLogRow; config: Connectio
 
   return (
     <div className="bg-ch-bg border-t border-ch-border/50 px-4 py-3 space-y-4">
+      {/* Query ID */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <CopyableId label="Query ID" value={row.query_id} />
+        {row.initial_query_id && row.initial_query_id !== row.query_id && (
+          <>
+            <span className="text-[10px] text-ch-muted">•</span>
+            <CopyableId label="Initial" value={row.initial_query_id} />
+          </>
+        )}
+      </div>
+
       {/* Full query */}
       <div>
         <div className="flex items-center justify-between mb-1.5">

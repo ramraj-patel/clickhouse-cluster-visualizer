@@ -821,6 +821,8 @@ export function QueryLogViewer({ config, filterQueryId, onClearFilter }: Props) 
   // Server-side search (query text substring, apply on Enter/blur)
   const [searchInput, setSearchInput]   = useState('')
   const [searchFilter, setSearchFilter] = useState('')
+  const [queryIdInput, setQueryIdInput] = useState('')
+  const [queryIdFilter, setQueryIdFilter] = useState('')
   // Sorting
   const [sortCol, setSortCol] = useState<SortCol>('event_time')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
@@ -831,6 +833,7 @@ export function QueryLogViewer({ config, filterQueryId, onClearFilter }: Props) 
   useEffect(() => { setDbSelections([]); setTableSelections([]) }, [intervalMinutes])
 
   function applySearch() { setSearchFilter(searchInput.trim()) }
+  function applyQueryId() { setQueryIdFilter(queryIdInput.trim()) }
 
   function toggleSort(col: SortCol) {
     if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -876,7 +879,7 @@ export function QueryLogViewer({ config, filterQueryId, onClearFilter }: Props) 
   const tableOptions = filterOptions?.tables    ?? []
 
   const { data, isLoading, isFetching, refetch, dataUpdatedAt, error } =
-    useQueryLog(config, intervalMinutes, limit, excludePatterns, dbSelections, tableSelections, searchFilter, autoRefresh ? 30_000 : false)
+    useQueryLog(config, intervalMinutes, limit, excludePatterns, dbSelections, tableSelections, searchFilter, autoRefresh ? 30_000 : false, queryIdFilter)
 
   // When coming from Process Monitor, do a direct server-side lookup by query_id
   // (bypasses time window + row limit — the query may be outside those bounds or still running)
@@ -972,6 +975,22 @@ export function QueryLogViewer({ config, filterQueryId, onClearFilter }: Props) 
           />
           {searchFilter && (
             <button onClick={() => { setSearchInput(''); setSearchFilter('') }} className="text-ch-muted hover:text-red-400 transition-colors flex-shrink-0">
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+        <div className={`flex items-center gap-1.5 border rounded-lg px-3 py-1.5 min-w-48 transition-colors ${queryIdFilter ? 'border-blue-400/40 bg-blue-400/5' : 'border-ch-border bg-ch-bg'}`}>
+          <input
+            type="text"
+            placeholder="Query ID / trace-id (LIKE)…"
+            value={queryIdInput}
+            onChange={e => setQueryIdInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') applyQueryId() }}
+            onBlur={applyQueryId}
+            className="bg-transparent text-xs text-ch-text placeholder:text-ch-muted focus:outline-none flex-1 min-w-0"
+          />
+          {queryIdFilter && (
+            <button onClick={() => { setQueryIdInput(''); setQueryIdFilter('') }} className="text-ch-muted hover:text-red-400 transition-colors flex-shrink-0">
               <X className="w-3 h-3" />
             </button>
           )}

@@ -200,7 +200,8 @@ export async function fetchQueryLog(
   excludePatterns: string[] = [],
   databases: string[] = [],
   tables: string[] = [],
-  search: string = ''
+  search: string = '',
+  queryIdFilter: string = ''
 ): Promise<QueryLogRow[]> {
   const excludeClauses = excludePatterns
     .map(p => `AND query NOT ILIKE '%${esc(p)}%'`)
@@ -214,6 +215,9 @@ export async function fetchQueryLog(
     : ''
   const searchClause = search.trim()
     ? `AND query ILIKE '%${esc(search.trim())}%'`
+    : ''
+  const queryIdClause = queryIdFilter.trim()
+    ? `AND query_id LIKE '%${esc(queryIdFilter.trim())}%'`
     : ''
 
   return runQuery<QueryLogRow>(config, `
@@ -243,6 +247,7 @@ export async function fetchQueryLog(
       ${dbClause}
       ${tableClause}
       ${searchClause}
+      ${queryIdClause}
     ORDER BY event_time DESC
     LIMIT ${limit}
   `)

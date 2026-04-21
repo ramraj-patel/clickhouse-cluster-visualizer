@@ -10,11 +10,12 @@ export function useQueryLog(
   databases: string[] = [],
   tables: string[] = [],
   search: string = '',
-  autoRefreshMs: number | false = false
+  autoRefreshMs: number | false = false,
+  queryIdFilter: string = ''
 ) {
   return useQuery({
-    queryKey: ['query_log', config, intervalMinutes, limit, excludePatterns, databases, tables, search],
-    queryFn: () => fetchQueryLog(config!, intervalMinutes, limit, excludePatterns, databases, tables, search),
+    queryKey: ['query_log', config, intervalMinutes, limit, excludePatterns, databases, tables, search, queryIdFilter],
+    queryFn: () => fetchQueryLog(config!, intervalMinutes, limit, excludePatterns, databases, tables, search, queryIdFilter),
     enabled: !!config,
     staleTime: 30_000,
     refetchInterval: autoRefreshMs,

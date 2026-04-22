@@ -218,7 +218,44 @@ export interface StoragePolicyRow {
 export type ActiveTab =
   | 'topology' | 'tables' | 'replication' | 'zookeeper' | 'health'
   | 'query-log' | 'parts' | 'processes' | 'mutations'
-  | 'hosts' | 'docs'
+  | 'hosts' | 'cluster-config' | 'docs'
+
+// ── Cluster Config types ────────────────────────────────────────────────────
+
+export interface MacroRow {
+  _shard_num: number
+  host: string
+  macro: string
+  substitution: string
+}
+
+export interface ServerSettingRow {
+  host: string
+  name: string
+  value: string
+  default: string
+  changed: number
+  description: string
+  type: string
+}
+
+export interface SettingRow {
+  host: string
+  name: string
+  value: string
+  changed: number
+  description: string
+  type: string
+}
+
+export interface MergeTreeSettingRow {
+  host: string
+  name: string
+  value: string
+  changed: number
+  description: string
+  type: string
+}
 
 // ── system.query_log ─────────────────────────────────────────────────────────
 

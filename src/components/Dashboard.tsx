@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react'
 import {
   RefreshCw, LogOut, Activity, Database, GitBranch, TreePine,
   BarChart3, AlertCircle, ChevronDown, BookOpen, HelpCircle,
-  FileText, HardDrive, Terminal, Wrench, HardDriveDownload, Server,
+  FileText, HardDrive, Terminal, Wrench, HardDriveDownload, Server, Settings,
 } from 'lucide-react'
 import { useClusterData } from '../hooks/useClusterData'
 import { ClusterTopology } from './ClusterTopology'
@@ -17,6 +17,7 @@ import { PartsInspector } from './PartsInspector'
 import { ProcessMonitor } from './ProcessMonitor'
 import { MutationsTracker } from './MutationsTracker'
 import { HostsPanel } from './HostsPanel'
+import { ClusterConfig } from './ClusterConfig'
 import { ErrorBoundary } from './ErrorBoundary'
 import { useUrlState } from '../hooks/useUrlState'
 import { safeNum } from '../api/clickhouse'
@@ -39,6 +40,7 @@ const TABS: { id: ActiveTab; label: string; icon: React.ReactNode }[] = [
   { id: 'processes',   label: 'Processes',   icon: <Terminal   className="w-4 h-4" /> },
   { id: 'mutations',   label: 'Mutations',   icon: <Wrench     className="w-4 h-4" /> },
   { id: 'hosts',       label: 'Hosts',       icon: <Server     className="w-4 h-4" /> },
+  { id: 'cluster-config', label: 'Config',   icon: <Settings   className="w-4 h-4" /> },
   { id: 'docs',        label: 'Query Docs',  icon: <BookOpen   className="w-4 h-4" /> },
 ]
 
@@ -316,6 +318,7 @@ export function Dashboard({ config, version, onDisconnect }: Props) {
         )}
         {tab === 'mutations'   && <ErrorBoundary label="Mutations tab"><MutationsTracker config={config} /></ErrorBoundary>}
         {tab === 'hosts'       && <ErrorBoundary label="Hosts tab"><HostsPanel clusters={clusters} config={config} /></ErrorBoundary>}
+        {tab === 'cluster-config' && <ErrorBoundary label="Config tab"><ClusterConfig config={config} clusters={clusters} /></ErrorBoundary>}
         {tab === 'docs'        && <ErrorBoundary label="Query Docs tab"><QueryDocs /></ErrorBoundary>}
       </main>
     </div>

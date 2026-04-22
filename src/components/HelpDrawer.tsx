@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { X, ChevronDown, ChevronRight, Database, GitBranch, Activity, TreePine, BarChart3, BookOpen, FileText, HardDrive, Terminal, Wrench, Server } from 'lucide-react'
+import { X, ChevronDown, ChevronRight, Database, GitBranch, Activity, TreePine, BarChart3, BookOpen, FileText, HardDrive, Terminal, Wrench, Server, Settings } from 'lucide-react'
 import type { ActiveTab } from '../types'
 
 interface Query {
@@ -574,6 +574,65 @@ WHERE database NOT IN ('system','INFORMATION_SCHEMA','information_schema')`,
   disks, volume_type, load_balancing
 FROM system.storage_policies
 ORDER BY policy_name, volume_priority`,
+      },
+    ],
+  },
+
+  'cluster-config': {
+    icon: <Settings className="w-4 h-4" />,
+    title: 'Cluster Configuration',
+    description:
+      'A comprehensive view of your cluster\'s configuration across all nodes. Shows macros (node identity), keeper coordination, operational limits (memory, timeouts, ingestion, threads, replication), and storage/network setup. Uses clusterAllReplicas() to fetch config from every node through a single connection.',
+    significance: [
+      'Node macros ({cluster}, {shard}, {replica}) define how ReplicatedMergeTree tables route data — mismatched macros cause replication failures and data loss.',
+      'Keeper/ZooKeeper coordination is the backbone of replication. If the keeper session expires, all replicated tables become read-only.',
+      'The comparison table highlights settings that differ across nodes. Inconsistent limits (e.g., different max_memory_usage) cause unpredictable query failures on specific nodes.',
+      'Operational limits like max_parts_in_total and max_execution_time are the most common causes of "mysterious" insert rejections and query timeouts.',
+      'Storage policies control data tiering (hot/cold). Misconfigured policies can fill SSDs while HDDs sit empty.',
+    ],
+    signals: [
+      { label: 'Yellow row in settings', meaning: 'This setting has different values across nodes — potential misconfiguration', severity: 'warn' },
+      { label: 'Keeper status: Expired', meaning: 'ZooKeeper session lost — replicated tables are read-only until reconnected', severity: 'danger' },
+      { label: 'Keeper status: Disconnected', meaning: 'Cannot reach keeper — replication and DDL will fail', severity: 'danger' },
+      { label: 'No macros configured', meaning: 'ReplicatedMergeTree tables cannot work without {shard} and {replica} macros', severity: 'danger' },
+      { label: 'TLS not configured', meaning: 'Client and inter-node traffic is unencrypted', severity: 'warn' },
+      { label: 'Disk usage > 95%', meaning: 'Disk is nearly full — merges and inserts may fail', severity: 'danger' },
+      { label: 'Disk usage > 85%', meaning: 'Disk filling up — plan capacity or adjust TTL/storage policies', severity: 'warn' },
+      { label: 'max_parts_in_total near limit', meaning: 'Table is approaching the part count limit — inserts will be rejected when exceeded', severity: 'warn' },
+    ],
+    queries: [
+      {
+        label: 'system.macros — node identity (cross-node)',
+        sql: `SELECT _shard_num, hostname() AS host, macro, substitution
+FROM clusterAllReplicas('{cluster}', system.macros)
+ORDER BY _shard_num, host, macro`,
+      },
+      {
+        label: 'system.server_settings — server config (cross-node)',
+        sql: `SELECT hostname() AS host, name, value, default, changed, description
+FROM clusterAllReplicas('{cluster}', system.server_settings)
+WHERE name IN ('interserver_http_port', 'listen_host', 'tcp_port', ...)
+ORDER BY host, name`,
+      },
+      {
+        label: 'system.settings — operational limits (cross-node)',
+        sql: `SELECT hostname() AS host, name, value, changed, description
+FROM clusterAllReplicas('{cluster}', system.settings)
+WHERE name IN ('max_memory_usage', 'max_execution_time', 'max_parts_in_total', ...)
+ORDER BY host, name`,
+      },
+      {
+        label: 'system.merge_tree_settings — MergeTree engine config (cross-node)',
+        sql: `SELECT hostname() AS host, name, value, changed, description
+FROM clusterAllReplicas('{cluster}', system.merge_tree_settings)
+WHERE name IN ('max_bytes_to_merge_at_max_space_in_pool', ...)
+ORDER BY host, name`,
+      },
+      {
+        label: 'system.zookeeper_connection — keeper status',
+        sql: `SELECT host, port, state, session_id, connected_time, is_expired, outstanding_requests
+FROM system.zookeeper_connection
+ORDER BY index`,
       },
     ],
   },

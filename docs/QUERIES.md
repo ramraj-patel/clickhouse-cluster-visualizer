@@ -1129,6 +1129,149 @@ Returns all storage policies and their volumes/disks configuration. Shown in the
 
 ---
 
+## 26. Node Macros (Cross-Shard)
+
+**Function:** `fetchMacros`
+**Source table:** `system.macros` via `clusterAllReplicas()`
+**Used by:** Config tab — Node Identity section
+
+```sql
+SELECT _shard_num, hostname() AS host, macro, substitution
+FROM clusterAllReplicas('{cluster}', system.macros)
+ORDER BY _shard_num, host, macro
+```
+
+**Purpose:**
+Fetches macro definitions from all nodes in the cluster. Macros like `{shard}`, `{replica}`, and `{cluster}` define each node's identity and are used in ReplicatedMergeTree ZooKeeper paths and ON CLUSTER DDL queries.
+
+**Output columns:**
+
+| Column         | Type   | Description                              |
+|----------------|--------|------------------------------------------|
+| `_shard_num`   | UInt32 | Shard number the node belongs to         |
+| `host`         | String | Hostname of the node                     |
+| `macro`        | String | Macro name (e.g. `shard`, `replica`)     |
+| `substitution` | String | Macro value on that node                 |
+
+---
+
+## 27. Server Settings (Cross-Shard)
+
+**Function:** `fetchServerSettings`
+**Source table:** `system.server_settings` via `clusterAllReplicas()`
+**Used by:** Config tab — Coordination and Storage & Network sections
+
+```sql
+SELECT hostname() AS host, name, value, default, changed, description, type
+FROM clusterAllReplicas('{cluster}', system.server_settings)
+WHERE name IN ('interserver_http_port', 'listen_host', 'tcp_port', ...)
+ORDER BY host, name
+```
+
+**Purpose:**
+Fetches server-level settings (ports, interserver config, memory limits, cache sizes) from all nodes. These are config-file level settings, not per-session settings.
+
+**Output columns:**
+
+| Column        | Type   | Description                                   |
+|---------------|--------|-----------------------------------------------|
+| `host`        | String | Hostname of the node                          |
+| `name`        | String | Setting name                                  |
+| `value`       | String | Current value                                 |
+| `default`     | String | Default value                                 |
+| `changed`     | UInt8  | 1 if changed from default                     |
+| `description` | String | ClickHouse-provided description               |
+| `type`        | String | Data type of the setting                      |
+
+---
+
+## 28. Operational Settings (Cross-Shard)
+
+**Function:** `fetchSettings`
+**Source table:** `system.settings` via `clusterAllReplicas()`
+**Used by:** Config tab — Limits & Resources section
+
+```sql
+SELECT hostname() AS host, name, value, changed, description, type
+FROM clusterAllReplicas('{cluster}', system.settings)
+WHERE name IN ('max_memory_usage', 'max_execution_time', 'max_parts_in_total', ...)
+ORDER BY host, name
+```
+
+**Purpose:**
+Fetches ~30 key operational settings (memory limits, timeouts, ingestion limits, thread pools, replication limits, network limits) from all nodes. The comparison table highlights values that differ across nodes.
+
+**Output columns:**
+
+| Column        | Type   | Description                     |
+|---------------|--------|---------------------------------|
+| `host`        | String | Hostname of the node            |
+| `name`        | String | Setting name                    |
+| `value`       | String | Current value                   |
+| `changed`     | UInt8  | 1 if changed from default       |
+| `description` | String | ClickHouse-provided description |
+| `type`        | String | Data type of the setting        |
+
+---
+
+## 29. MergeTree Settings (Cross-Shard)
+
+**Function:** `fetchMergeTreeSettings`
+**Source table:** `system.merge_tree_settings` via `clusterAllReplicas()`
+**Used by:** Config tab — Limits & Resources section (MergeTree category)
+
+```sql
+SELECT hostname() AS host, name, value, changed, description, type
+FROM clusterAllReplicas('{cluster}', system.merge_tree_settings)
+WHERE name IN ('max_bytes_to_merge_at_max_space_in_pool', ...)
+ORDER BY host, name
+```
+
+**Purpose:**
+Fetches MergeTree engine settings that control merge behavior, part limits, and mutation scheduling from all nodes.
+
+**Output columns:**
+
+| Column        | Type   | Description                     |
+|---------------|--------|---------------------------------|
+| `host`        | String | Hostname of the node            |
+| `name`        | String | Setting name                    |
+| `value`       | String | Current value                   |
+| `changed`     | UInt8  | 1 if changed from default       |
+| `description` | String | ClickHouse-provided description |
+| `type`        | String | Data type of the setting        |
+
+---
+
+## 30. Distributed DDL Settings (Cross-Shard)
+
+**Function:** `fetchDistributedDDLSettings`
+**Source table:** `system.settings` via `clusterAllReplicas()`
+**Used by:** Config tab — Coordination section
+
+```sql
+SELECT hostname() AS host, name, value, changed, description, type
+FROM clusterAllReplicas('{cluster}', system.settings)
+WHERE name LIKE 'distributed_ddl%'
+ORDER BY host, name
+```
+
+**Purpose:**
+Fetches distributed DDL settings that control how ON CLUSTER queries are coordinated across nodes.
+
+**Output columns:**
+
+| Column        | Type   | Description                     |
+|---------------|--------|---------------------------------|
+| `host`        | String | Hostname of the node            |
+| `name`        | String | Setting name                    |
+| `value`       | String | Current value                   |
+| `changed`     | UInt8  | 1 if changed from default       |
+| `description` | String | ClickHouse-provided description |
+| `type`        | String | Data type of the setting        |
+
+---
+
 ## Refresh Behaviour
 
 | Query group                                     | Interval   | Stale time | Notes |
@@ -1144,6 +1287,7 @@ Returns all storage policies and their volumes/disks configuration. Shown in the
 | Host info, disks, table counts (Hosts tab)          | 30 seconds | 30 seconds | Cross-shard via `clusterAllReplicas()` |
 | Host table list (Hosts tab)                         | On demand  | 60 seconds | Lazy-loaded on expand |
 | ZooKeeper connections (`system.zookeeper_connection`) | 30 seconds | 15 seconds | Stops retrying on 404 (ClickHouse < 22.6) |
+| Cluster Config (macros, settings, server settings)   | 60 seconds | 55 seconds | Cross-shard via `clusterAllReplicas()`; falls back to local queries |
 | ZooKeeper tree nodes (`system.zookeeper`)       | On demand  | 30 seconds | One query per node expansion; not auto-polled |
 
 **Proxy timeout:** Increased from 15s to 30s in `config/server.ts` to accommodate Query Log queries and the opt-in `clusterAllReplicas()` cross-shard fetch.

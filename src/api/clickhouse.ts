@@ -27,6 +27,10 @@ import type {
   HostInfoRow,
   HostDiskRow,
   StoragePolicyRow,
+  MacroRow,
+  ServerSettingRow,
+  SettingRow,
+  MergeTreeSettingRow,
 } from '../types'
 
 /** Safely coerce unknown (possibly string) UInt64 from ClickHouse JSON to number */
@@ -661,5 +665,160 @@ export async function fetchServerErrors(config: ConnectionConfig): Promise<Serve
     WHERE value > 0
     ORDER BY value DESC
     LIMIT 50
+  `)
+}
+
+// ── Cluster Config ──────────────────────────────────────────────────────────
+
+export async function fetchMacros(
+  config: ConnectionConfig,
+  clusterName: string | null
+): Promise<MacroRow[]> {
+  if (clusterName) {
+    try {
+      return await runQuery<MacroRow>(config, `
+        SELECT _shard_num, hostname() AS host, macro, substitution
+        FROM clusterAllReplicas('${esc(clusterName)}', system.macros)
+        ORDER BY _shard_num, host, macro
+      `)
+    } catch { /* fall through to local */ }
+  }
+  return runQuery<MacroRow>(config, `
+    SELECT 0 AS _shard_num, hostName() AS host, macro, substitution
+    FROM system.macros
+    ORDER BY macro
+  `)
+}
+
+const SERVER_SETTING_NAMES = [
+  'interserver_http_port', 'interserver_http_host', 'interserver_http_credentials',
+  'listen_host', 'tcp_port', 'http_port', 'tcp_port_secure', 'https_port',
+  'max_server_memory_usage', 'max_server_memory_usage_to_ram_ratio',
+  'max_concurrent_queries', 'max_connections',
+  'mark_cache_size', 'uncompressed_cache_size',
+  'keep_alive_timeout',
+]
+
+export async function fetchServerSettings(
+  config: ConnectionConfig,
+  clusterName: string | null
+): Promise<ServerSettingRow[]> {
+  const nameList = SERVER_SETTING_NAMES.map(n => `'${n}'`).join(', ')
+  if (clusterName) {
+    try {
+      return await runQuery<ServerSettingRow>(config, `
+        SELECT hostname() AS host, name, value, default, changed, description, type
+        FROM clusterAllReplicas('${esc(clusterName)}', system.server_settings)
+        WHERE name IN (${nameList})
+        ORDER BY host, name
+      `)
+    } catch { /* fall through */ }
+  }
+  return runQuery<ServerSettingRow>(config, `
+    SELECT hostName() AS host, name, value, default, changed, description, type
+    FROM system.server_settings
+    WHERE name IN (${nameList})
+    ORDER BY name
+  `)
+}
+
+const SETTING_NAMES = [
+  // Memory
+  'max_memory_usage', 'max_memory_usage_for_user',
+  'max_bytes_before_external_sort', 'max_bytes_before_external_group_by',
+  // Timeouts
+  'max_execution_time', 'receive_timeout', 'send_timeout',
+  'connect_timeout', 'http_receive_timeout',
+  // Ingestion
+  'max_insert_block_size', 'max_partition_size_to_drop',
+  'max_parts_in_total', 'max_insert_threads',
+  'min_insert_block_size_rows', 'min_insert_block_size_bytes',
+  // Thread pools
+  'max_threads', 'background_pool_size', 'background_fetches_pool_size',
+  'background_schedule_pool_size', 'background_move_pool_size',
+  'max_replicated_fetches_network_bandwidth',
+  // Replication
+  'max_replicated_merges_in_queue', 'max_replicated_mutations_in_queue',
+  'max_replicated_sends_in_queue',
+  'replicated_deduplication_window', 'replicated_deduplication_window_seconds',
+  // Network
+  'max_distributed_connections', 'distributed_connections_pool_size',
+]
+
+export async function fetchSettings(
+  config: ConnectionConfig,
+  clusterName: string | null
+): Promise<SettingRow[]> {
+  const nameList = SETTING_NAMES.map(n => `'${n}'`).join(', ')
+  if (clusterName) {
+    try {
+      return await runQuery<SettingRow>(config, `
+        SELECT hostname() AS host, name, value, changed, description, type
+        FROM clusterAllReplicas('${esc(clusterName)}', system.settings)
+        WHERE name IN (${nameList})
+        ORDER BY host, name
+      `)
+    } catch { /* fall through */ }
+  }
+  return runQuery<SettingRow>(config, `
+    SELECT hostName() AS host, name, value, changed, description, type
+    FROM system.settings
+    WHERE name IN (${nameList})
+    ORDER BY name
+  `)
+}
+
+const MERGE_TREE_SETTING_NAMES = [
+  'max_bytes_to_merge_at_max_space_in_pool',
+  'max_bytes_to_merge_at_min_space_in_pool',
+  'merge_max_block_size',
+  'max_parts_to_merge_at_once',
+  'number_of_free_entries_in_pool_to_execute_mutation',
+  'max_replicated_merges_in_queue',
+  'max_replicated_mutations_in_queue',
+]
+
+export async function fetchMergeTreeSettings(
+  config: ConnectionConfig,
+  clusterName: string | null
+): Promise<MergeTreeSettingRow[]> {
+  const nameList = MERGE_TREE_SETTING_NAMES.map(n => `'${n}'`).join(', ')
+  if (clusterName) {
+    try {
+      return await runQuery<MergeTreeSettingRow>(config, `
+        SELECT hostname() AS host, name, value, changed, description, type
+        FROM clusterAllReplicas('${esc(clusterName)}', system.merge_tree_settings)
+        WHERE name IN (${nameList})
+        ORDER BY host, name
+      `)
+    } catch { /* fall through */ }
+  }
+  return runQuery<MergeTreeSettingRow>(config, `
+    SELECT hostName() AS host, name, value, changed, description, type
+    FROM system.merge_tree_settings
+    WHERE name IN (${nameList})
+    ORDER BY name
+  `)
+}
+
+export async function fetchDistributedDDLSettings(
+  config: ConnectionConfig,
+  clusterName: string | null
+): Promise<SettingRow[]> {
+  if (clusterName) {
+    try {
+      return await runQuery<SettingRow>(config, `
+        SELECT hostname() AS host, name, value, changed, description, type
+        FROM clusterAllReplicas('${esc(clusterName)}', system.settings)
+        WHERE name LIKE 'distributed_ddl%'
+        ORDER BY host, name
+      `)
+    } catch { /* fall through */ }
+  }
+  return runQuery<SettingRow>(config, `
+    SELECT hostName() AS host, name, value, changed, description, type
+    FROM system.settings
+    WHERE name LIKE 'distributed_ddl%'
+    ORDER BY name
   `)
 }

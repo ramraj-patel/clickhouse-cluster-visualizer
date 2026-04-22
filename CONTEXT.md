@@ -100,8 +100,9 @@ cluster-visualizer/
         ├── ProcessMonitor.tsx    # Live processes, 5s refresh, "View in Log" cross-link
         ├── MutationsTracker.tsx  # Mutation status, fail reason, parts_to_do countdown
         ├── HostsPanel.tsx        # Per-host view: CPU, memory, disks, tables, FDs, shard assignment
+        ├── ClusterConfig.tsx     # Cross-node config: macros, keeper, limits, storage, network
         ├── QueryDocs.tsx         # Renders docs/QUERIES.md?raw
-        └── HelpDrawer.tsx        # Record<ActiveTab, TabHelp> — all 11 tabs covered
+        └── HelpDrawer.tsx        # Record<ActiveTab, TabHelp> — all 12 tabs covered
 ```
 
 ---
@@ -336,12 +337,21 @@ Progress bars: indeterminate when `total_rows_approx === 0`. Border: yellow at >
 `isFailed(row)` checks `latest_fail_reason !== ''`. `cmdType(command)` regex extracts mutation type.
 Show/hide completed toggle. `parts_to_do_names` expandable list for stuck mutation diagnosis.
 
+### ClusterConfig.tsx
+Props: `config, clusters`. Derives `clusterName` from `clusters[0].cluster`.
+Uses `useClusterConfig` hook (60s refetch). Four collapsible sections:
+1. **Node Identity & Macros** — cards grouped by shard, macros table per node, plain-English summaries
+2. **Coordination & Keeper** — ZK connection table, interserver settings, distributed DDL settings
+3. **Limits & Resources** — comparison table (settings as rows, nodes as columns), 7 categories (Memory, Timeouts, Ingestion, Thread Pools, Replication, Network, MergeTree), yellow highlight on diffs
+4. **Storage & Network** — per-node disk cards with progress bars, storage policies table, ports/TLS status
+Top summary bar: Nodes, Shards, Setting Differences, Keeper Status. All queries use `clusterAllReplicas()` with local-only fallback.
+
 ### QueryDocs.tsx
 Stateless. Imports `docs/QUERIES.md?raw` via Vite raw import, renders with ReactMarkdown + custom styled components.
 
 ### HelpDrawer.tsx
 `HELP` typed as `Record<ActiveTab, TabHelp>` — TypeScript compile error if any tab is missing.
-Covers all 11 tabs. Each entry has: icon, title, description, significance[], signals[], queries[].
+Covers all 12 tabs. Each entry has: icon, title, description, significance[], signals[], queries[].
 The `health` key covers: status pill derivation, alert panel behaviour, per-shard traffic (clusterAllReplicas SQL), metric drawer usage, all three system table sources.
 `SqlBlock` sub-component: collapsible SQL display.
 
@@ -353,7 +363,7 @@ The `health` key covers: status pill derivation, alert panel behaviour, per-shar
 type ActiveTab =
   | 'topology' | 'tables' | 'replication' | 'zookeeper' | 'health'
   | 'query-log' | 'parts' | 'processes' | 'mutations'
-  | 'hosts' | 'docs'
+  | 'hosts' | 'cluster-config' | 'docs'
 ```
 
 Note: was `'metrics'` before the Health Dashboard redesign — renamed to `'health'`.
@@ -395,6 +405,7 @@ Dark theme only. No light mode.
 | Table columns | On-demand | 60s | inside `DistributedTables` |
 | Host info, disks, table counts | 30s | 30s | inside `HostsPanel` (clusterAllReplicas) |
 | Host table list | On-demand | 60s | inside `HostsPanel` (lazy on expand) |
+| Cluster config (macros, settings, server settings) | 60s | 55s | `useClusterConfig` (clusterAllReplicas with local fallback) |
 
 ---
 

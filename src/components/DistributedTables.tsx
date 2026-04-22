@@ -79,7 +79,7 @@ function SchemaSection({ config, database, table }: { config: ConnectionConfig; 
             <tr key={col.name} className="hover:bg-ch-bg/40 transition-colors">
               <td className="px-3 py-1.5 text-ch-muted">{col.position}</td>
               <td className="px-3 py-1.5 font-medium text-ch-text font-mono">{col.name}</td>
-              <td className="px-3 py-1.5 text-blue-400 font-mono">{col.type}</td>
+              <td className="px-3 py-1.5 text-ch-info font-mono">{col.type}</td>
               <td className="px-3 py-1.5 text-ch-muted font-mono">
                 {col.default_kind ? `${col.default_kind} ${col.default_expression}` : '—'}
               </td>
@@ -140,7 +140,7 @@ function DistributedCard({ dist, replicatedTable, clusters, config, pinned, onTo
           ? <ChevronDown className="w-4 h-4 text-ch-muted flex-shrink-0" />
           : <ChevronRight className="w-4 h-4 text-ch-muted flex-shrink-0" />
         }
-        <Share2 className="w-4 h-4 text-blue-400 flex-shrink-0" />
+        <Share2 className="w-4 h-4 text-ch-info flex-shrink-0" />
         <span className="font-semibold text-ch-text text-sm">{dist.name}</span>
 
         {distConfig && (
@@ -162,7 +162,7 @@ function DistributedCard({ dist, replicatedTable, clusters, config, pinned, onTo
               <div className="text-xs font-mono text-ch-text">{formatBytes(bytes)}</div>
             </div>
           )}
-          <span className="text-[10px] bg-blue-500/15 text-blue-400 border border-blue-500/25 px-2 py-0.5 rounded font-medium">
+          <span className="text-[10px] bg-blue-500/15 text-ch-info border border-blue-500/25 px-2 py-0.5 rounded font-medium">
             Distributed
           </span>
           <button
@@ -261,7 +261,7 @@ function DistributedCard({ dist, replicatedTable, clusters, config, pinned, onTo
                             <span className="font-mono text-ch-text">{r.host_name}</span>
                             <span className="text-ch-muted">:{r.port}</span>
                             {r.is_local === 1 && (
-                              <span className="text-[9px] bg-green-500/15 text-green-400 border border-green-500/25 px-1 rounded">local</span>
+                              <span className="text-[9px] bg-ch-success/15 text-ch-success border border-green-500/25 px-1 rounded">local</span>
                             )}
                           </div>
                         ))}
@@ -313,7 +313,7 @@ function ReplicatedCard({ table, config, pinned, onTogglePin }: { table: Distrib
         onClick={() => setOpen(o => !o)}
       >
         {open ? <ChevronDown className="w-4 h-4 text-ch-muted flex-shrink-0" /> : <ChevronRight className="w-4 h-4 text-ch-muted flex-shrink-0" />}
-        <Database className="w-4 h-4 text-purple-400 flex-shrink-0" />
+        <Database className="w-4 h-4 text-ch-purple flex-shrink-0" />
         <span className="font-semibold text-ch-text text-sm">{table.name}</span>
         <div className="ml-auto flex items-center gap-3 flex-shrink-0">
           {table.total_rows != null && (
@@ -328,7 +328,7 @@ function ReplicatedCard({ table, config, pinned, onTogglePin }: { table: Distrib
               <div className="text-xs font-mono text-ch-text">{formatBytes(table.total_bytes)}</div>
             </div>
           )}
-          <span className="text-[10px] bg-purple-500/15 text-purple-400 border border-purple-500/25 px-2 py-0.5 rounded font-medium">
+          <span className="text-[10px] bg-purple-500/15 text-ch-purple border border-purple-500/25 px-2 py-0.5 rounded font-medium">
             {table.engine.replace('Replicated', '').replace('MergeTree', 'MT')}
           </span>
           <button

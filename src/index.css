@@ -2,6 +2,68 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Theme tokens ──────────────────────────────────────────────────────────── */
+
+:root {
+  --ch-bg: #f8f9fb;
+  --ch-surface: #ffffff;
+  --ch-border: #e2e5eb;
+  --ch-accent: #b8860b;
+  --ch-text: #1e293b;
+  --ch-muted: #64748b;
+
+  --ch-success: #16a34a;
+  --ch-warning: #ca8a04;
+  --ch-danger: #dc2626;
+  --ch-info: #2563eb;
+  --ch-orange: #ea580c;
+  --ch-purple: #9333ea;
+
+  --ch-success-bg: rgba(22,163,74,0.10);
+  --ch-warning-bg: rgba(202,138,4,0.10);
+  --ch-danger-bg: rgba(220,38,38,0.10);
+  --ch-info-bg: rgba(37,99,235,0.10);
+
+  --ch-node-bg: rgba(226,229,235,0.5);
+  --ch-node-border: rgba(0,0,0,0.08);
+  --ch-shard-bg: rgba(226,229,235,0.4);
+  --ch-cluster-bg: rgba(180,140,0,0.06);
+  --ch-cluster-border: rgba(180,140,0,0.25);
+  --ch-cluster-sys-bg: rgba(100,116,139,0.06);
+  --ch-cluster-sys-border: rgba(100,116,139,0.2);
+}
+
+.dark {
+  --ch-bg: #0f1117;
+  --ch-surface: #1a1d27;
+  --ch-border: #2a2d3e;
+  --ch-accent: #ffcc00;
+  --ch-text: #e2e8f0;
+  --ch-muted: #64748b;
+
+  --ch-success: #4ade80;
+  --ch-warning: #facc15;
+  --ch-danger: #f87171;
+  --ch-info: #60a5fa;
+  --ch-orange: #fb923c;
+  --ch-purple: #c084fc;
+
+  --ch-success-bg: rgba(74,222,128,0.12);
+  --ch-warning-bg: rgba(250,204,21,0.12);
+  --ch-danger-bg: rgba(248,113,113,0.12);
+  --ch-info-bg: rgba(96,165,250,0.12);
+
+  --ch-node-bg: rgba(42,45,62,0.6);
+  --ch-node-border: rgba(255,255,255,0.06);
+  --ch-shard-bg: rgba(42,45,62,0.6);
+  --ch-cluster-bg: rgba(255,204,0,0.06);
+  --ch-cluster-border: rgba(255,204,0,0.25);
+  --ch-cluster-sys-bg: rgba(148,163,184,0.04);
+  --ch-cluster-sys-border: rgba(148,163,184,0.2);
+}
+
+/* ── Base ──────────────────────────────────────────────────────────────────── */
+
 * {
   box-sizing: border-box;
 }
@@ -15,13 +77,14 @@ body,
   font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
 }
 
-/* React Flow overrides */
+/* ── React Flow overrides ──────────────────────────────────────────────────── */
+
 .react-flow__controls button {
-  background: #1a1d27 !important;
-  border-color: #2a2d3e !important;
-  color: #e2e8f0 !important;
+  background: var(--ch-surface) !important;
+  border-color: var(--ch-border) !important;
+  color: var(--ch-text) !important;
 }
 
 .react-flow__controls button:hover {
-  background: #2a2d3e !important;
+  background: var(--ch-border) !important;
 }

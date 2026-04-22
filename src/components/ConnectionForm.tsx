@@ -94,7 +94,7 @@ export function ConnectionForm({ onConnect, loading, error }: Props) {
           </div>
 
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 text-sm text-red-400">
+            <div className="bg-ch-danger/10 border border-red-500/30 rounded-lg px-4 py-3 text-sm text-ch-danger">
               {error}
             </div>
           )}

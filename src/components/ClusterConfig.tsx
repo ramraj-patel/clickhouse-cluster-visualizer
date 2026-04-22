@@ -190,14 +190,14 @@ export function ClusterConfig({ config, clusters }: Props) {
       {/* Limits & Resources */}
       <Section
         title="Limits & Resources"
-        icon={<Gauge className="w-4 h-4 text-yellow-400" />}
+        icon={<Gauge className="w-4 h-4 text-ch-warning" />}
         badge={
           diffCount > 0 ? (
-            <span className="text-xs text-yellow-400 flex items-center gap-1">
+            <span className="text-xs text-ch-warning flex items-center gap-1">
               <AlertTriangle className="w-3.5 h-3.5" /> {diffCount} differ{diffCount === 1 ? 's' : ''}
             </span>
           ) : settingsHosts.length > 1 ? (
-            <span className="text-xs text-emerald-400 flex items-center gap-1">
+            <span className="text-xs text-ch-success flex items-center gap-1">
               <CheckCircle2 className="w-3.5 h-3.5" /> All consistent
             </span>
           ) : null
@@ -215,20 +215,20 @@ export function ClusterConfig({ config, clusters }: Props) {
                 type="checkbox"
                 checked={showDiffs}
                 onChange={(e) => setShowDiffs(e.target.checked)}
-                className="rounded border-ch-border bg-ch-surface text-yellow-500 focus:ring-yellow-500/30 w-3.5 h-3.5 cursor-pointer"
+                className="rounded border-ch-border bg-ch-surface text-ch-warning focus:ring-yellow-500/30 w-3.5 h-3.5 cursor-pointer"
               />
-              <span className="text-yellow-400 flex items-center gap-1">
+              <span className="text-ch-warning flex items-center gap-1">
                 <AlertTriangle className="w-3.5 h-3.5" />
                 Show {diffDetails.length} setting{diffDetails.length !== 1 ? 's' : ''} that differ across nodes
               </span>
             </label>
             {showDiffs && (
-              <div className="mt-2 border border-yellow-500/30 rounded-lg bg-yellow-900/10 p-3">
+              <div className="mt-2 border border-ch-warning/30 rounded-lg bg-ch-warning/10 p-3">
                 <div className="space-y-2">
                   {diffDetails.map(d => (
                     <div key={d.name} className="text-xs">
                       <div className="flex items-center gap-1.5 mb-1">
-                        <span className="font-mono text-yellow-300 font-medium">{d.name}</span>
+                        <span className="font-mono text-ch-warning font-medium">{d.name}</span>
                         {SETTING_EXPLANATIONS[d.name] && (
                           <Tooltip text={SETTING_EXPLANATIONS[d.name]}>
                             <Info className="w-3 h-3 text-ch-muted/60" />
@@ -239,7 +239,7 @@ export function ClusterConfig({ config, clusters }: Props) {
                         {d.values.map(v => (
                           <div key={v.host} className="flex items-center gap-2 text-[11px]">
                             <span className="font-mono text-ch-muted truncate min-w-[120px]">{v.host}</span>
-                            <span className="font-mono text-yellow-300">{v.value}</span>
+                            <span className="font-mono text-ch-warning">{v.value}</span>
                           </div>
                         ))}
                       </div>
@@ -265,7 +265,7 @@ export function ClusterConfig({ config, clusters }: Props) {
               <div className="flex items-center gap-2 mb-2">
                 <div className="text-xs font-medium text-ch-muted uppercase tracking-wider">{cat.label}</div>
                 {catDiffNames.size > 0 && (
-                  <span className="text-[10px] text-yellow-400 flex items-center gap-1">
+                  <span className="text-[10px] text-ch-warning flex items-center gap-1">
                     <AlertTriangle className="w-3 h-3" /> {catDiffNames.size} differ{catDiffNames.size === 1 ? 's' : ''} across nodes
                   </span>
                 )}
@@ -279,9 +279,9 @@ export function ClusterConfig({ config, clusters }: Props) {
                         const differs = catDiffNames.has(name)
                         const explanation = SETTING_EXPLANATIONS[name] || settingDescMap.get(name) || ''
                         return (
-                          <th key={name} className={`text-right py-1.5 px-2 font-normal whitespace-nowrap ${differs ? 'bg-yellow-900/10' : ''}`}>
+                          <th key={name} className={`text-right py-1.5 px-2 font-normal whitespace-nowrap ${differs ? 'bg-ch-warning/10' : ''}`}>
                             <span className="flex items-center justify-end gap-1">
-                              {differs && <AlertTriangle className="w-3 h-3 text-yellow-400 flex-shrink-0" />}
+                              {differs && <AlertTriangle className="w-3 h-3 text-ch-warning flex-shrink-0" />}
                               <span className="font-mono">{name}</span>
                               {explanation && (
                                 <Tooltip text={explanation}>
@@ -304,7 +304,7 @@ export function ClusterConfig({ config, clusters }: Props) {
                           return (
                             <td
                               key={name}
-                              className={`py-1.5 px-2 text-right font-mono ${differs ? 'text-yellow-300 bg-yellow-900/10' : 'text-ch-accent'}`}
+                              className={`py-1.5 px-2 text-right font-mono ${differs ? 'text-ch-warning bg-ch-warning/10' : 'text-ch-accent'}`}
                             >
                               {hostMap.get(host) ?? '—'}
                             </td>

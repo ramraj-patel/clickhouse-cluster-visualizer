@@ -444,10 +444,10 @@ function MetricDetailDrawer({ def, value, onClose, onNavigate }: DrawerProps) {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="text-xs uppercase tracking-wider text-ch-muted font-medium">{def.label}</span>
-              {isDanger && <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 font-semibold">DANGER</span>}
-              {isWarn   && <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-400 font-semibold">WARN</span>}
+              {isDanger && <span className="text-[10px] px-1.5 py-0.5 rounded bg-ch-danger/15 text-ch-danger font-semibold">DANGER</span>}
+              {isWarn   && <span className="text-[10px] px-1.5 py-0.5 rounded bg-ch-warning/15 text-ch-warning font-semibold">WARN</span>}
             </div>
-            <div className={`text-3xl font-bold font-mono ${isDanger ? 'text-red-400' : isWarn ? 'text-yellow-400' : 'text-ch-text'}`}>
+            <div className={`text-3xl font-bold font-mono ${isDanger ? 'text-ch-danger' : isWarn ? 'text-ch-warning' : 'text-ch-text'}`}>
               {display}
             </div>
           </div>
@@ -466,7 +466,7 @@ function MetricDetailDrawer({ def, value, onClose, onNavigate }: DrawerProps) {
             <div className="text-[10px] uppercase tracking-wider text-ch-muted font-medium mb-1.5">Operational impact</div>
             <p className="text-ch-text/90 text-xs leading-relaxed">{def.impact}</p>
           </div>
-          <div className={`rounded-lg p-3 border ${isDanger ? 'bg-red-500/5 border-red-500/20' : isWarn ? 'bg-yellow-500/5 border-yellow-500/20' : 'bg-ch-bg border-ch-border'}`}>
+          <div className={`rounded-lg p-3 border ${isDanger ? 'bg-ch-danger/5 border-red-500/20' : isWarn ? 'bg-ch-warning/5 border-yellow-500/20' : 'bg-ch-bg border-ch-border'}`}>
             <div className="text-[10px] uppercase tracking-wider text-ch-muted font-medium mb-1.5">When to act</div>
             <p className="text-ch-text/90 text-xs leading-relaxed">{def.whenToAct}</p>
           </div>
@@ -476,8 +476,8 @@ function MetricDetailDrawer({ def, value, onClose, onNavigate }: DrawerProps) {
         {(def.warnAt !== undefined || def.dangerAt !== undefined) && (
           <div className="flex items-center gap-4 mt-3 text-xs text-ch-muted">
             <span>Thresholds:</span>
-            {def.warnAt   !== undefined && <span className="text-yellow-400">⚠ warn ≥ {fmtValue(def.warnAt, def.format)}</span>}
-            {def.dangerAt !== undefined && <span className="text-red-400">✕ danger ≥ {fmtValue(def.dangerAt, def.format)}</span>}
+            {def.warnAt   !== undefined && <span className="text-ch-warning">⚠ warn ≥ {fmtValue(def.warnAt, def.format)}</span>}
+            {def.dangerAt !== undefined && <span className="text-ch-danger">✕ danger ≥ {fmtValue(def.dangerAt, def.format)}</span>}
           </div>
         )}
 
@@ -515,7 +515,7 @@ function MetricCard({
 
   return (
     <div className={`bg-ch-surface border rounded-xl p-3 flex flex-col gap-1.5 transition-colors ${
-      isDanger ? 'border-red-500/40' : isWarn ? 'border-yellow-500/30' : 'border-ch-border'
+      isDanger ? 'border-red-500/40' : isWarn ? 'border-ch-warning/30' : 'border-ch-border'
     }`}>
       <div className="flex items-start justify-between gap-1">
         <span className="text-[10px] uppercase tracking-wider text-ch-muted font-medium leading-tight">
@@ -524,7 +524,7 @@ function MetricCard({
         <div className="flex items-center gap-1 flex-shrink-0">
           {(isDanger || isWarn) && (
             <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${
-              isDanger ? 'bg-red-500/15 text-red-400' : 'bg-yellow-500/15 text-yellow-400'
+              isDanger ? 'bg-ch-danger/15 text-ch-danger' : 'bg-ch-warning/15 text-ch-warning'
             }`}>
               {isDanger ? '!' : '~'}
             </span>
@@ -542,7 +542,7 @@ function MetricCard({
       <Sparkline data={series} warnAt={def.warnAt} dangerAt={def.dangerAt} invertThreshold={def.invertThreshold} />
 
       <div className={`text-lg font-bold font-mono leading-none ${
-        isDanger ? 'text-red-400' : isWarn ? 'text-yellow-400' : 'text-ch-text'
+        isDanger ? 'text-ch-danger' : isWarn ? 'text-ch-warning' : 'text-ch-text'
       }`}>
         {display}
       </div>
@@ -564,9 +564,9 @@ function StatusPill({
   onClick?: () => void
 }) {
   const colors: Record<HealthStatus, string> = {
-    healthy: 'bg-green-500/10 border-green-500/20 text-green-400',
-    warn:    'bg-yellow-500/10 border-yellow-500/20 text-yellow-400',
-    danger:  'bg-red-500/10 border-red-500/20 text-red-400',
+    healthy: 'bg-ch-success/10 border-green-500/20 text-ch-success',
+    warn:    'bg-ch-warning/10 border-yellow-500/20 text-ch-warning',
+    danger:  'bg-ch-danger/10 border-red-500/20 text-ch-danger',
     unknown: 'bg-ch-border/30 border-ch-border text-ch-muted',
   }
   const icons: Record<HealthStatus, React.ReactNode> = {
@@ -640,8 +640,8 @@ function AlertsPanel({
           key={i}
           className={`flex items-start gap-2 px-3 py-2 rounded-lg border text-xs ${
             a.severity === 'danger'
-              ? 'bg-red-500/8 border-red-500/20 text-red-300'
-              : 'bg-yellow-500/8 border-yellow-500/20 text-yellow-300'
+              ? 'bg-ch-danger/8 border-red-500/20 text-ch-danger'
+              : 'bg-ch-warning/8 border-yellow-500/20 text-ch-warning'
           }`}
         >
           {a.severity === 'danger'
@@ -702,11 +702,11 @@ function ClusterHealthSection({
 
   const statCards = [
     { label: 'Total Replicas',   value: String(totalReplicas),    color: 'text-ch-text' },
-    { label: 'Unhealthy',        value: String(unhealthyReplicas), color: unhealthyReplicas > 0 ? 'text-red-400' : 'text-green-400' },
-    { label: 'Read-only',        value: String(readonlyReplicas),  color: readonlyReplicas > 0 ? 'text-red-400' : 'text-green-400' },
-    { label: 'ZK Expired',       value: String(zkExpiredReplicas), color: zkExpiredReplicas > 0 ? 'text-red-400' : 'text-green-400' },
-    { label: 'Max Lag',          value: maxLag > 0 ? fmtDuration(maxLag * 1000) : '0s', color: maxLag > 300 ? 'text-red-400' : maxLag > 60 ? 'text-yellow-400' : 'text-green-400' },
-    { label: 'Queue Depth',      value: String(totalQueueDepth),   color: totalQueueDepth > 100 ? 'text-yellow-400' : 'text-ch-text' },
+    { label: 'Unhealthy',        value: String(unhealthyReplicas), color: unhealthyReplicas > 0 ? 'text-ch-danger' : 'text-ch-success' },
+    { label: 'Read-only',        value: String(readonlyReplicas),  color: readonlyReplicas > 0 ? 'text-ch-danger' : 'text-ch-success' },
+    { label: 'ZK Expired',       value: String(zkExpiredReplicas), color: zkExpiredReplicas > 0 ? 'text-ch-danger' : 'text-ch-success' },
+    { label: 'Max Lag',          value: maxLag > 0 ? fmtDuration(maxLag * 1000) : '0s', color: maxLag > 300 ? 'text-ch-danger' : maxLag > 60 ? 'text-ch-warning' : 'text-ch-success' },
+    { label: 'Queue Depth',      value: String(totalQueueDepth),   color: totalQueueDepth > 100 ? 'text-ch-warning' : 'text-ch-text' },
   ]
 
   return (
@@ -728,8 +728,8 @@ function ClusterHealthSection({
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
             {disks.map(d => {
               const used = safeNum(d.used_fraction)
-              const color = used > 0.95 ? 'bg-red-500' : used > 0.85 ? 'bg-yellow-500' : 'bg-green-500'
-              const textColor = used > 0.95 ? 'text-red-400' : used > 0.85 ? 'text-yellow-400' : 'text-ch-muted'
+              const color = used > 0.95 ? 'bg-ch-danger' : used > 0.85 ? 'bg-ch-warning' : 'bg-ch-success'
+              const textColor = used > 0.95 ? 'text-ch-danger' : used > 0.85 ? 'text-ch-warning' : 'text-ch-muted'
               return (
                 <div key={d.name} className="bg-ch-surface border border-ch-border rounded-xl p-3">
                   <div className="flex items-center justify-between mb-2">
@@ -767,7 +767,7 @@ function ClusterHealthSection({
         </div>
 
         {shardError ? (
-          <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+          <div className="text-xs text-ch-danger bg-ch-danger/10 border border-red-500/20 rounded-lg px-3 py-2">
             Could not fetch shard metrics: {(shardError as Error).message}
           </div>
         ) : shardRows.length === 0 && !shardFetching ? (
@@ -793,16 +793,16 @@ function ClusterHealthSection({
                   <tr key={i} className="border-b border-ch-border/50 hover:bg-ch-surface/50 transition-colors">
                     <td className="py-1.5 pr-4 font-mono text-ch-accent">{row._shard_num}</td>
                     <td className="py-1.5 pr-4 text-ch-muted truncate max-w-[180px]" title={row.host}>{row.host}</td>
-                    <td className={`py-1.5 pr-4 text-right font-mono ${safeNum(row.active_queries) > 50 ? 'text-yellow-400' : 'text-ch-text'}`}>
+                    <td className={`py-1.5 pr-4 text-right font-mono ${safeNum(row.active_queries) > 50 ? 'text-ch-warning' : 'text-ch-text'}`}>
                       {safeNum(row.active_queries)}
                     </td>
-                    <td className={`py-1.5 pr-4 text-right font-mono ${safeNum(row.active_merges) > 10 ? 'text-yellow-400' : 'text-ch-text'}`}>
+                    <td className={`py-1.5 pr-4 text-right font-mono ${safeNum(row.active_merges) > 10 ? 'text-ch-warning' : 'text-ch-text'}`}>
                       {safeNum(row.active_merges)}
                     </td>
                     <td className="py-1.5 pr-4 text-right font-mono text-ch-text">
                       {fmtBytes(safeNum(row.query_memory))}
                     </td>
-                    <td className={`py-1.5 pr-4 text-right font-mono ${safeNum(row.delayed_inserts) > 0 ? 'text-red-400' : 'text-ch-text'}`}>
+                    <td className={`py-1.5 pr-4 text-right font-mono ${safeNum(row.delayed_inserts) > 0 ? 'text-ch-danger' : 'text-ch-text'}`}>
                       {safeNum(row.delayed_inserts)}
                     </td>
                     <td className="py-1.5 text-right font-mono text-ch-text">
@@ -961,17 +961,17 @@ export function HealthDashboard({ config, clusters, replicas, disks, onNavigate 
           <div className="flex items-center gap-1.5 text-ch-muted">
             <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin text-ch-accent' : ''}`} />
             {paused
-              ? <span className="text-yellow-400">Paused</span>
+              ? <span className="text-ch-warning">Paused</span>
               : collecting
-              ? <span className="text-yellow-400">Collecting baseline…</span>
-              : <span className="text-green-400">Live</span>
+              ? <span className="text-ch-warning">Collecting baseline…</span>
+              : <span className="text-ch-success">Live</span>
             }
           </div>
           <button
             onClick={() => setPaused(p => !p)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
               paused
-                ? 'bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20'
+                ? 'bg-ch-success/10 border-green-500/30 text-ch-success hover:bg-ch-success/20'
                 : 'bg-ch-surface border-ch-border text-ch-muted hover:text-ch-text hover:border-ch-accent/30'
             }`}
           >

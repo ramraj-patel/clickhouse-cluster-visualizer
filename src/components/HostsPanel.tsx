@@ -47,9 +47,9 @@ function pct(n: number) {
 }
 
 function usageColor(fraction: number) {
-  if (fraction > 0.95) return 'text-red-400'
-  if (fraction > 0.85) return 'text-yellow-400'
-  return 'text-green-400'
+  if (fraction > 0.95) return 'text-ch-danger'
+  if (fraction > 0.85) return 'text-ch-warning'
+  return 'text-ch-success'
 }
 
 // ── Stat pill ──────────────────────────────────────────────────────────────
@@ -80,7 +80,7 @@ function DiskBar({ disk }: { disk: HostDiskRow }) {
       <div className="w-full h-1.5 bg-ch-border/50 rounded-full overflow-hidden">
         <div
           className={`h-full rounded-full transition-all ${
-            used > 0.95 ? 'bg-red-500' : used > 0.85 ? 'bg-yellow-500' : 'bg-green-500'
+            used > 0.95 ? 'bg-ch-danger' : used > 0.85 ? 'bg-ch-warning' : 'bg-ch-success'
           }`}
           style={{ width: `${Math.min(used * 100, 100)}%` }}
         />
@@ -217,7 +217,7 @@ function HostCard({ data, config, pinned, onTogglePin }: { data: HostData; confi
         onClick={() => setOpen(o => !o)}
       >
         {open ? <ChevronDown className="w-4 h-4 text-ch-muted flex-shrink-0" /> : <ChevronRight className="w-4 h-4 text-ch-muted flex-shrink-0" />}
-        <Server className="w-4 h-4 text-blue-400 flex-shrink-0" />
+        <Server className="w-4 h-4 text-ch-info flex-shrink-0" />
         <span className="font-semibold text-ch-text text-sm font-mono">{data.host}</span>
 
         <div className="ml-auto flex items-center gap-3 flex-shrink-0">
@@ -237,7 +237,7 @@ function HostCard({ data, config, pinned, onTogglePin }: { data: HostData; confi
               </div>
             </>
           )}
-          <span className="text-[10px] bg-blue-500/15 text-blue-400 border border-blue-500/25 px-2 py-0.5 rounded font-medium">
+          <span className="text-[10px] bg-blue-500/15 text-ch-info border border-blue-500/25 px-2 py-0.5 rounded font-medium">
             S{data.shardNum} R{data.replicaNum}
           </span>
           <button
@@ -415,7 +415,7 @@ function StoragePoliciesSection({ config }: { config: ConnectionConfig }) {
                     </div>
                     <div className="ml-5 flex flex-wrap gap-1.5">
                       {(vol.disks as string[]).map(disk => (
-                        <span key={disk} className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded font-mono">
+                        <span key={disk} className="text-[10px] bg-blue-500/10 text-ch-info border border-blue-500/20 px-1.5 py-0.5 rounded font-mono">
                           {disk}
                         </span>
                       ))}

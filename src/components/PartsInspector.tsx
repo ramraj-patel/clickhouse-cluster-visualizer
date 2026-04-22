@@ -23,9 +23,9 @@ function partHealth(row: PartSummaryRow): 'danger' | 'warn' | 'ok' {
 
 function PartTypeBadge({ type }: { type: string }) {
   const styles: Record<string, string> = {
-    Wide:     'bg-blue-500/10 text-blue-400 border-blue-500/20',
-    Compact:  'bg-purple-500/10 text-purple-400 border-purple-500/20',
-    InMemory: 'bg-green-500/10 text-green-400 border-green-500/20',
+    Wide:     'bg-blue-500/10 text-ch-info border-blue-500/20',
+    Compact:  'bg-purple-500/10 text-ch-purple border-purple-500/20',
+    InMemory: 'bg-ch-success/10 text-ch-success border-green-500/20',
   }
   return (
     <span className={`text-[9px] px-1 py-0.5 rounded border ${styles[type] ?? 'bg-ch-border/40 text-ch-muted border-ch-border'}`}>
@@ -38,11 +38,11 @@ function PartTypeBadge({ type }: { type: string }) {
 
 function EventBadge({ type }: { type: string }) {
   const styles: Record<string, string> = {
-    NewPart:      'bg-green-500/10 text-green-400 border-green-500/20',
-    MergeParts:   'bg-blue-500/10 text-blue-400 border-blue-500/20',
+    NewPart:      'bg-ch-success/10 text-ch-success border-green-500/20',
+    MergeParts:   'bg-blue-500/10 text-ch-info border-blue-500/20',
     DownloadPart: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
-    RemovePart:   'bg-red-500/10 text-red-400 border-red-500/20',
-    MutatePart:   'bg-orange-500/10 text-orange-400 border-orange-500/20',
+    RemovePart:   'bg-ch-danger/10 text-ch-danger border-red-500/20',
+    MutatePart:   'bg-orange-500/10 text-ch-orange border-orange-500/20',
   }
   return (
     <span className={`text-[9px] px-1 py-0.5 rounded border ${styles[type] ?? 'bg-ch-border/40 text-ch-muted border-ch-border'}`}>
@@ -101,7 +101,7 @@ function PartitionSection({ parts, partitionId }: { parts: PartDetailRow[]; part
   const [open, setOpen] = useState(false)
   const totalBytes = parts.reduce((s, p) => s + safeNum(p.bytes_on_disk), 0)
   const totalRows  = parts.reduce((s, p) => s + safeNum(p.rows), 0)
-  const warnColor  = parts.length > 300 ? 'text-red-400' : parts.length > 100 ? 'text-yellow-400' : 'text-ch-text'
+  const warnColor  = parts.length > 300 ? 'text-ch-danger' : parts.length > 100 ? 'text-ch-warning' : 'text-ch-text'
 
   return (
     <div className="border-b border-ch-border/30 last:border-0">
@@ -140,7 +140,7 @@ function PartitionSection({ parts, partitionId }: { parts: PartDetailRow[]; part
                   <td className="py-1.5 px-3 text-right text-ch-muted">{fmtRows(safeNum(p.rows))}</td>
                   <td className="py-1.5 px-3 text-right text-ch-text">{fmtBytes(safeNum(p.bytes_on_disk))}</td>
                   <td className="py-1.5 px-3 text-right text-ch-muted">{fmtBytes(safeNum(p.data_uncompressed_bytes))}</td>
-                  <td className={`py-1.5 px-3 text-right ${safeNum(p.refcount) > 1 ? 'text-yellow-400' : 'text-ch-muted'}`}>
+                  <td className={`py-1.5 px-3 text-right ${safeNum(p.refcount) > 1 ? 'text-ch-warning' : 'text-ch-muted'}`}>
                     {p.refcount}
                   </td>
                   <td className="py-1.5 px-3 text-ch-muted font-mono">{p.disk_name}</td>
@@ -207,7 +207,7 @@ function TableRow({ row, config }: { row: PartSummaryRow; config: ConnectionConf
         <span className="text-xs text-ch-muted w-24 text-right">{safeNum(row.partition_count)} partitions</span>
         <span className="text-xs text-ch-text w-24 text-right">{fmtBytes(safeNum(row.total_bytes))}</span>
         <span className="text-xs text-ch-muted w-28 text-right">{fmtBytes(safeNum(row.total_uncompressed))}</span>
-        <span className={`text-xs w-16 text-right font-semibold ${ratio < 2 ? 'text-yellow-400' : 'text-green-400'}`}>
+        <span className={`text-xs w-16 text-right font-semibold ${ratio < 2 ? 'text-ch-warning' : 'text-ch-success'}`}>
           {ratio.toFixed(1)}×
         </span>
         <span className="text-xs text-ch-muted w-24 text-right">{fmtRows(safeNum(row.total_rows))}</span>
@@ -246,7 +246,7 @@ function TableRow({ row, config }: { row: PartSummaryRow; config: ConnectionConf
           ) : (
             <>
               {partsTruncated && (
-                <div className="mx-4 mb-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-xs">
+                <div className="mx-4 mb-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-ch-warning/10 border border-yellow-500/20 text-ch-warning text-xs">
                   <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
                   Showing first {PARTS_LIMIT.toLocaleString()} parts — table has more. Results are truncated.
                 </div>
@@ -314,8 +314,8 @@ export function PartsInspector({ config }: Props) {
       {/* Active merges banner */}
       {activeMerges.length > 0 && (
         <div className="flex items-center gap-3 px-6 py-2.5 bg-blue-500/8 border-b border-blue-500/20 text-xs flex-shrink-0">
-          <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse flex-shrink-0" />
-          <span className="font-semibold text-blue-400">{activeMerges.length} active merge{activeMerges.length > 1 ? 's' : ''}</span>
+          <span className="w-2 h-2 rounded-full bg-ch-info animate-pulse flex-shrink-0" />
+          <span className="font-semibold text-ch-info">{activeMerges.length} active merge{activeMerges.length > 1 ? 's' : ''}</span>
           <span className="text-ch-muted">
             {activeMerges.map(m =>
               `${m.database}.${m.table} — ${(m.progress * 100).toFixed(0)}% (${m.elapsed.toFixed(0)}s elapsed${m.is_mutation ? ', mutation' : ''})`
@@ -374,10 +374,10 @@ export function PartsInspector({ config }: Props) {
 
             {/* Health warnings */}
             {warnings.length > 0 && (
-              <div className="mx-6 mb-4 p-3 bg-yellow-500/8 border border-yellow-500/20 rounded-xl space-y-1">
+              <div className="mx-6 mb-4 p-3 bg-ch-warning/8 border border-yellow-500/20 rounded-xl space-y-1">
                 {warnings.map((w, i) => (
-                  <div key={i} className="flex items-start gap-2 text-xs text-yellow-300">
-                    <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-yellow-400" />
+                  <div key={i} className="flex items-start gap-2 text-xs text-ch-warning">
+                    <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-ch-warning" />
                     {w}
                   </div>
                 ))}

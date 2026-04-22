@@ -33,9 +33,9 @@ function costScore(row: QueryLogRow): number {
 }
 
 function CostBadge({ score }: { score: number }) {
-  const color = score >= 7 ? 'text-red-400 border-red-500/30 bg-red-500/10'
-    : score >= 4 ? 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10'
-    : 'text-green-400 border-green-500/30 bg-green-500/10'
+  const color = score >= 7 ? 'text-ch-danger border-red-500/30 bg-ch-danger/10'
+    : score >= 4 ? 'text-ch-warning border-ch-warning/30 bg-ch-warning/10'
+    : 'text-ch-success border-green-500/30 bg-ch-success/10'
   return (
     <span className={`inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded border ${color} tabular-nums`}>
       ●{score}
@@ -54,8 +54,8 @@ function ThreadDetail({ config, queryId }: { config: ConnectionConfig; queryId: 
   })
   if (isLoading) return <div className="text-xs text-ch-muted py-2 animate-pulse">Loading thread data…</div>
   if (error) return (
-    <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2.5 text-[11px] space-y-1">
-      <p className="font-medium text-red-400">Query failed: {(error as Error).message}</p>
+    <div className="bg-ch-danger/10 border border-red-500/20 rounded-lg px-3 py-2.5 text-[11px] space-y-1">
+      <p className="font-medium text-ch-danger">Query failed: {(error as Error).message}</p>
       <p className="text-ch-muted">This may mean <code className="font-mono text-ch-accent">system.query_thread_log</code> is unavailable or the user lacks SELECT permission on it.</p>
     </div>
   )
@@ -116,7 +116,7 @@ function CrossShardPanel({
   })
   if (isLoading) return <div className="text-xs text-ch-muted py-2 animate-pulse">Querying all shards…</div>
   if (error) return (
-    <div className="text-xs text-red-400 py-2">
+    <div className="text-xs text-ch-danger py-2">
       Failed: {(error as Error).message}. Check clusterAllReplicas access.
     </div>
   )
@@ -190,7 +190,7 @@ function CopyableId({ label, value }: { label: string; value: string }) {
         className="text-ch-muted hover:text-ch-accent transition-colors p-0.5"
         title={`Copy ${label}`}
       >
-        {copied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+        {copied ? <Check className="w-3 h-3 text-ch-success" /> : <Copy className="w-3 h-3" />}
       </button>
     </span>
   )
@@ -257,7 +257,7 @@ function QueryDetailPanel({ row, config }: { row: QueryLogRow; config: Connectio
               onClick={copy}
               className="flex items-center gap-1 text-[10px] text-ch-muted hover:text-ch-accent border border-ch-border rounded-lg px-2 py-0.5 transition-colors"
             >
-              {copied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+              {copied ? <Check className="w-3 h-3 text-ch-success" /> : <Copy className="w-3 h-3" />}
               {copied ? 'Copied!' : 'Copy'}
             </button>
           </div>
@@ -266,8 +266,8 @@ function QueryDetailPanel({ row, config }: { row: QueryLogRow; config: Connectio
           {sqlFormatted ? tryFormatSql(row.query) : row.query}
         </pre>
         {row.exception && (
-          <div className="mt-2 p-2.5 bg-red-500/8 border border-red-500/20 rounded-lg text-[10px] text-red-300 leading-relaxed">
-            <span className="font-semibold text-red-400">Exception: </span>{row.exception}
+          <div className="mt-2 p-2.5 bg-ch-danger/8 border border-red-500/20 rounded-lg text-[10px] text-ch-danger leading-relaxed">
+            <span className="font-semibold text-ch-danger">Exception: </span>{row.exception}
           </div>
         )}
       </div>
@@ -486,7 +486,7 @@ function QueryRow({
             </span>
           )}
           {isError && (
-            <span className="text-[9px] px-1 py-0.5 rounded border bg-red-500/15 text-red-400 border-red-500/25 leading-none">
+            <span className="text-[9px] px-1 py-0.5 rounded border bg-ch-danger/15 text-ch-danger border-red-500/25 leading-none">
               ERR
             </span>
           )}
@@ -628,7 +628,7 @@ function MultiSelect({ label, options, selected, onChange, loading }: MultiSelec
                   {selected.length > 0 && (
                     <button
                       onClick={() => onChange([])}
-                      className="text-[11px] text-ch-muted hover:text-red-400 transition-colors"
+                      className="text-[11px] text-ch-muted hover:text-ch-danger transition-colors"
                     >
                       Clear
                     </button>
@@ -716,7 +716,7 @@ function ExcludeDropdown({ patterns, onAdd, onRemove }: ExcludeProps) {
         onClick={() => setOpen(v => !v)}
         className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
           patterns.length > 0
-            ? 'bg-orange-500/10 border-orange-500/30 text-orange-400'
+            ? 'bg-orange-500/10 border-orange-500/30 text-ch-orange'
             : 'border-ch-border text-ch-muted hover:text-ch-text'
         }`}
         title="Exclude queries whose text matches any of these patterns"
@@ -762,7 +762,7 @@ function ExcludeDropdown({ patterns, onAdd, onRemove }: ExcludeProps) {
                       <code className="text-[11px] font-mono text-ch-accent flex-1 truncate" title={p}>{p}</code>
                       <button
                         onClick={() => onRemove(p)}
-                        className="text-ch-muted hover:text-red-400 transition-colors flex-shrink-0"
+                        className="text-ch-muted hover:text-ch-danger transition-colors flex-shrink-0"
                         title="Remove"
                       >
                         <X className="w-3 h-3" />
@@ -974,12 +974,12 @@ export function QueryLogViewer({ config, filterQueryId, onClearFilter }: Props) 
             className="bg-transparent text-xs text-ch-text placeholder:text-ch-muted focus:outline-none flex-1 min-w-0"
           />
           {searchFilter && (
-            <button onClick={() => { setSearchInput(''); setSearchFilter('') }} className="text-ch-muted hover:text-red-400 transition-colors flex-shrink-0">
+            <button onClick={() => { setSearchInput(''); setSearchFilter('') }} className="text-ch-muted hover:text-ch-danger transition-colors flex-shrink-0">
               <X className="w-3 h-3" />
             </button>
           )}
         </div>
-        <div className={`flex items-center gap-1.5 border rounded-lg px-3 py-1.5 flex-1 basis-0 min-w-0 transition-colors ${queryIdFilter ? 'border-blue-400/40 bg-blue-400/5' : 'border-ch-border bg-ch-bg'}`}>
+        <div className={`flex items-center gap-1.5 border rounded-lg px-3 py-1.5 flex-1 basis-0 min-w-0 transition-colors ${queryIdFilter ? 'border-blue-400/40 bg-ch-info/5' : 'border-ch-border bg-ch-bg'}`}>
           <input
             type="text"
             placeholder="Query ID / trace-id (LIKE)…"
@@ -990,7 +990,7 @@ export function QueryLogViewer({ config, filterQueryId, onClearFilter }: Props) 
             className="bg-transparent text-xs text-ch-text placeholder:text-ch-muted focus:outline-none flex-1 min-w-0"
           />
           {queryIdFilter && (
-            <button onClick={() => { setQueryIdInput(''); setQueryIdFilter('') }} className="text-ch-muted hover:text-red-400 transition-colors flex-shrink-0">
+            <button onClick={() => { setQueryIdInput(''); setQueryIdFilter('') }} className="text-ch-muted hover:text-ch-danger transition-colors flex-shrink-0">
               <X className="w-3 h-3" />
             </button>
           )}
@@ -1007,7 +1007,7 @@ export function QueryLogViewer({ config, filterQueryId, onClearFilter }: Props) 
         <button
           onClick={() => setErrorsOnly(v => !v)}
           className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
-            errorsOnly ? 'bg-red-500/10 border-red-500/30 text-red-400' : 'border-ch-border text-ch-muted hover:text-ch-text'
+            errorsOnly ? 'bg-ch-danger/10 border-red-500/30 text-ch-danger' : 'border-ch-border text-ch-muted hover:text-ch-text'
           }`}
         >
           <AlertCircle className="w-3 h-3" /> Errors only
@@ -1042,11 +1042,11 @@ export function QueryLogViewer({ config, filterQueryId, onClearFilter }: Props) 
           title={autoRefresh ? 'Auto-refresh on (30s) — click to disable' : 'Auto-refresh off — click to enable (30s)'}
           className={`flex items-center gap-1.5 text-xs border rounded-lg px-2.5 py-1.5 transition-colors ${
             autoRefresh
-              ? 'bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20'
+              ? 'bg-ch-success/10 border-green-500/30 text-ch-success hover:bg-ch-success/20'
               : 'border-ch-border text-ch-muted hover:text-ch-text'
           }`}
         >
-          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${autoRefresh ? 'bg-green-400 animate-pulse' : 'bg-ch-border'}`} />
+          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${autoRefresh ? 'bg-ch-success animate-pulse' : 'bg-ch-border'}`} />
           {autoRefresh ? 'Live' : 'Paused'}
         </button>
       </div>
@@ -1072,7 +1072,7 @@ export function QueryLogViewer({ config, filterQueryId, onClearFilter }: Props) 
         {(dbSelections.length > 0 || tableSelections.length > 0) && (
           <button
             onClick={() => { setDbSelections([]); setTableSelections([]) }}
-            className="text-[10px] text-red-400 hover:text-red-300 border border-red-500/30 rounded-lg px-2 py-1 transition-colors ml-auto"
+            className="text-[10px] text-ch-danger hover:text-ch-danger border border-red-500/30 rounded-lg px-2 py-1 transition-colors ml-auto"
           >
             Clear all
           </button>
@@ -1094,7 +1094,7 @@ export function QueryLogViewer({ config, filterQueryId, onClearFilter }: Props) 
 
       {/* Error banner */}
       {error && (
-        <div className="flex items-start gap-2 px-6 py-3 bg-red-500/10 border-b border-red-500/20 text-red-400 text-xs flex-shrink-0">
+        <div className="flex items-start gap-2 px-6 py-3 bg-ch-danger/10 border-b border-red-500/20 text-ch-danger text-xs flex-shrink-0">
           <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <div className="min-w-0">
             <span className="font-semibold">Query failed: </span>
@@ -1109,7 +1109,7 @@ export function QueryLogViewer({ config, filterQueryId, onClearFilter }: Props) 
           Showing <span className="text-ch-text font-semibold">{filtered.length}</span>
           {!filterQueryId && rows.length >= limit && (
             <span
-              className="ml-1.5 text-yellow-400"
+              className="ml-1.5 text-ch-warning"
               title={`Results capped at ${limit}. Reduce the time window or increase the limit to see more.`}
             >
               ⚠ {limit} limit reached
@@ -1120,10 +1120,10 @@ export function QueryLogViewer({ config, filterQueryId, onClearFilter }: Props) 
           <span className="text-ch-muted">{systemCount} system hidden</span>
         )}
         {excludePatterns.length > 0 && (
-          <span className="text-orange-400/80">{excludePatterns.length} pattern{excludePatterns.length > 1 ? 's' : ''} excluded (server-side)</span>
+          <span className="text-ch-orange/80">{excludePatterns.length} pattern{excludePatterns.length > 1 ? 's' : ''} excluded (server-side)</span>
         )}
         {totalErrors > 0 && (
-          <span className="text-red-400"><span className="font-semibold">{totalErrors}</span> errors</span>
+          <span className="text-ch-danger"><span className="font-semibold">{totalErrors}</span> errors</span>
         )}
         <span className="text-ch-muted">p95 <span className="text-ch-text font-semibold">{fmtDuration(p95)}</span></span>
         {lastUpdated && <span className="text-ch-muted ml-auto">fetched {lastUpdated}</span>}
@@ -1137,8 +1137,8 @@ export function QueryLogViewer({ config, filterQueryId, onClearFilter }: Props) 
           </div>
         ) : filterQueryId && !directLoading && filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 gap-3 text-center px-6">
-            <div className="w-10 h-10 rounded-full bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center">
-              <Loader2 className="w-5 h-5 text-yellow-400 animate-spin" />
+            <div className="w-10 h-10 rounded-full bg-ch-warning/10 border border-yellow-500/20 flex items-center justify-center">
+              <Loader2 className="w-5 h-5 text-ch-warning animate-spin" />
             </div>
             <p className="text-sm font-medium text-ch-text">Query not in log yet</p>
             <p className="text-xs text-ch-muted max-w-sm">

@@ -22,19 +22,19 @@ function ConnectionCard({ conn }: { conn: ZookeeperConnection }) {
   const isExpired   = conn.is_expired === 1 || conn.state === 'SessionExpired'
 
   const stateColor = isConnected
-    ? 'text-emerald-400 bg-emerald-400/10 border-emerald-400/30'
+    ? 'text-ch-success bg-ch-success/10 border-emerald-400/30'
     : isStandby
-    ? 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30'
-    : 'text-red-400 bg-red-400/10 border-red-400/30'
+    ? 'text-ch-warning bg-ch-warning/10 border-yellow-400/30'
+    : 'text-ch-danger bg-ch-danger/10 border-red-400/30'
 
   return (
     <div className="bg-ch-surface border border-ch-border rounded-xl p-4 flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           {isConnected ? (
-            <Wifi className="w-4 h-4 text-emerald-400" />
+            <Wifi className="w-4 h-4 text-ch-success" />
           ) : (
-            <WifiOff className="w-4 h-4 text-red-400" />
+            <WifiOff className="w-4 h-4 text-ch-danger" />
           )}
           <span className="font-semibold text-ch-text text-sm">{conn.host}</span>
           <span className="text-ch-muted text-xs">:{conn.port}</span>
@@ -52,14 +52,14 @@ function ConnectionCard({ conn }: { conn: ZookeeperConnection }) {
         <div className="text-ch-text font-mono">v{conn.keeper_api_version}</div>
 
         <div className="text-ch-muted">Outstanding</div>
-        <div className={`font-mono ${conn.outstanding_requests > 0 ? 'text-yellow-400' : 'text-ch-text'}`}>
+        <div className={`font-mono ${conn.outstanding_requests > 0 ? 'text-ch-warning' : 'text-ch-text'}`}>
           {conn.outstanding_requests} requests
         </div>
 
         {isExpired && (
           <>
             <div className="text-ch-muted">Session</div>
-            <div className="text-red-400 font-mono">Expired</div>
+            <div className="text-ch-danger font-mono">Expired</div>
           </>
         )}
 
@@ -101,27 +101,27 @@ function CommunicationFlow() {
   const flows = [
     {
       title: 'Leader Election',
-      icon: <Shield className="w-4 h-4 text-purple-400" />,
+      icon: <Shield className="w-4 h-4 text-ch-purple" />,
       desc: 'ZooKeeper coordinates which replica becomes the replication leader for each table shard.',
-      color: 'bg-purple-400/5 border-purple-400/20 text-purple-200',
+      color: 'bg-ch-purple/5 border-purple-400/20 text-ch-purple',
     },
     {
       title: 'Replication Log',
-      icon: <GitBranch className="w-4 h-4 text-blue-400" />,
+      icon: <GitBranch className="w-4 h-4 text-ch-info" />,
       desc: 'Each INSERT/MERGE is written to the ZK replication log. Replicas watch and pull entries to stay in sync.',
-      color: 'bg-blue-400/5 border-blue-400/20 text-blue-200',
+      color: 'bg-ch-info/5 border-blue-400/20 text-ch-info',
     },
     {
       title: 'Part Registry',
-      icon: <Database className="w-4 h-4 text-emerald-400" />,
+      icon: <Database className="w-4 h-4 text-ch-success" />,
       desc: 'The set of data parts each replica holds is registered in ZK so other replicas know what to fetch.',
-      color: 'bg-emerald-400/5 border-emerald-400/20 text-emerald-200',
+      color: 'bg-ch-success/5 border-emerald-400/20 text-ch-success',
     },
     {
       title: 'Distributed DDL',
-      icon: <Server className="w-4 h-4 text-yellow-400" />,
+      icon: <Server className="w-4 h-4 text-ch-warning" />,
       desc: 'ON CLUSTER DDL statements are queued in ZK under /clickhouse/task_queue so all nodes execute them.',
-      color: 'bg-yellow-400/5 border-yellow-400/20 text-yellow-200',
+      color: 'bg-ch-warning/5 border-yellow-400/20 text-ch-warning',
     },
   ]
 
@@ -182,13 +182,13 @@ function TableZkRow({ replica, pinned, onPin }: {
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             {isReadonly && (
-              <span className="text-xs px-1.5 py-0.5 rounded bg-red-400/10 text-red-400 border border-red-400/20">readonly</span>
+              <span className="text-xs px-1.5 py-0.5 rounded bg-ch-danger/10 text-ch-danger border border-red-400/20">readonly</span>
             )}
             {isSessionExpired && (
-              <span className="text-xs px-1.5 py-0.5 rounded bg-orange-400/10 text-orange-400 border border-orange-400/20">session expired</span>
+              <span className="text-xs px-1.5 py-0.5 rounded bg-ch-orange/10 text-ch-orange border border-orange-400/20">session expired</span>
             )}
             {hasError && (
-              <AlertCircle className="w-3.5 h-3.5 text-red-400" />
+              <AlertCircle className="w-3.5 h-3.5 text-ch-danger" />
             )}
             <span className="text-xs text-ch-muted font-mono">{replica.replica_name}</span>
           </div>
@@ -223,9 +223,9 @@ function TableZkRow({ replica, pinned, onPin }: {
             <div>
               <div className="text-ch-muted mb-0.5">Log gap</div>
               <div className={`font-mono font-semibold ${
-                replica.log_max_index - replica.log_pointer > 100 ? 'text-red-400'
-                : replica.log_max_index - replica.log_pointer > 10 ? 'text-yellow-400'
-                : 'text-emerald-400'
+                replica.log_max_index - replica.log_pointer > 100 ? 'text-ch-danger'
+                : replica.log_max_index - replica.log_pointer > 10 ? 'text-ch-warning'
+                : 'text-ch-success'
               }`}>
                 {Math.max(0, replica.log_max_index - replica.log_pointer)}
               </div>
@@ -233,26 +233,26 @@ function TableZkRow({ replica, pinned, onPin }: {
             </div>
             <div>
               <div className="text-ch-muted mb-0.5">Queue size</div>
-              <div className={`font-mono font-semibold ${replica.queue_size > 50 ? 'text-yellow-400' : 'text-ch-text'}`}>
+              <div className={`font-mono font-semibold ${replica.queue_size > 50 ? 'text-ch-warning' : 'text-ch-text'}`}>
                 {replica.queue_size}
               </div>
             </div>
             <div>
               <div className="text-ch-muted mb-0.5">Absolute delay</div>
-              <div className={`font-mono font-semibold ${replica.absolute_delay > 300 ? 'text-red-400' : replica.absolute_delay > 60 ? 'text-yellow-400' : 'text-ch-text'}`}>
+              <div className={`font-mono font-semibold ${replica.absolute_delay > 300 ? 'text-ch-danger' : replica.absolute_delay > 60 ? 'text-ch-warning' : 'text-ch-text'}`}>
                 {replica.absolute_delay}s
               </div>
             </div>
           </div>
 
           {replica.zookeeper_exception && (
-            <div className="bg-red-500/10 border border-red-500/20 rounded p-2 text-red-400">
+            <div className="bg-ch-danger/10 border border-red-500/20 rounded p-2 text-ch-danger">
               <div className="font-medium mb-0.5">ZooKeeper Exception</div>
               <div className="font-mono">{replica.zookeeper_exception}</div>
             </div>
           )}
           {replica.last_queue_update_exception && (
-            <div className="bg-orange-500/10 border border-orange-500/20 rounded p-2 text-orange-400">
+            <div className="bg-orange-500/10 border border-orange-500/20 rounded p-2 text-ch-orange">
               <div className="font-medium mb-0.5">Queue Update Exception</div>
               <div className="font-mono">{replica.last_queue_update_exception}</div>
             </div>
@@ -438,12 +438,12 @@ export function ZookeeperNodes({ config, replicas }: Props) {
         {connections.isLoading ? (
           <div className="text-sm text-ch-muted">Loading ZooKeeper connections…</div>
         ) : connections.isError ? (
-          <div className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs">
+          <div className="flex items-start gap-2 p-3 bg-ch-danger/10 border border-red-500/20 rounded-xl text-ch-danger text-xs">
             <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <div>
               <div className="font-medium">system.zookeeper_connection unavailable</div>
-              <div className="text-red-300/70 mt-0.5">{(connections.error as Error)?.message}</div>
-              <div className="text-red-300/50 mt-1">Requires ClickHouse 22.6+ with ZooKeeper/Keeper configured.</div>
+              <div className="text-ch-danger/70 mt-0.5">{(connections.error as Error)?.message}</div>
+              <div className="text-ch-danger/50 mt-1">Requires ClickHouse 22.6+ with ZooKeeper/Keeper configured.</div>
             </div>
           </div>
         ) : connCount === 0 ? (
@@ -454,7 +454,7 @@ export function ZookeeperNodes({ config, replicas }: Props) {
           <>
             <div className="flex items-center gap-4 mb-3 text-xs text-ch-muted">
               <span>
-                <span className="text-emerald-400 font-semibold">{liveCount}</span> connected
+                <span className="text-ch-success font-semibold">{liveCount}</span> connected
               </span>
               <span>
                 <span className="text-ch-text font-semibold">{connCount}</span> total hosts
@@ -485,7 +485,7 @@ export function ZookeeperNodes({ config, replicas }: Props) {
             </p>
           </div>
           {problemCount > 0 && (
-            <span className="flex items-center gap-1.5 text-xs text-red-400">
+            <span className="flex items-center gap-1.5 text-xs text-ch-danger">
               <AlertCircle className="w-3.5 h-3.5" />
               {problemCount} with issues
             </span>
@@ -578,11 +578,11 @@ export function ZookeeperNodes({ config, replicas }: Props) {
           {root.isLoading ? (
             <div className="p-4 text-sm text-ch-muted">Loading ZooKeeper tree…</div>
           ) : root.isError ? (
-            <div className="flex items-start gap-2 p-3 text-red-400 text-xs">
+            <div className="flex items-start gap-2 p-3 text-ch-danger text-xs">
               <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <div>
                 <div className="font-medium">system.zookeeper unavailable</div>
-                <div className="text-red-300/70 mt-0.5">{(root.error as Error)?.message}</div>
+                <div className="text-ch-danger/70 mt-0.5">{(root.error as Error)?.message}</div>
               </div>
             </div>
           ) : root.data?.length === 0 ? (

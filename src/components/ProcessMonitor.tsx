@@ -11,9 +11,9 @@ interface Props {
 }
 
 const KIND_COLOR: Record<string, string> = {
-  Select: 'bg-blue-500/15 text-blue-400 border-blue-500/25',
-  Insert: 'bg-green-500/15 text-green-400 border-green-500/25',
-  Alter:  'bg-orange-500/15 text-orange-400 border-orange-500/25',
+  Select: 'bg-blue-500/15 text-ch-info border-blue-500/25',
+  Insert: 'bg-ch-success/15 text-ch-success border-green-500/25',
+  Alter:  'bg-orange-500/15 text-ch-orange border-orange-500/25',
 }
 
 function kindColor(kind: string) {
@@ -21,20 +21,20 @@ function kindColor(kind: string) {
 }
 
 function elapsedColor(s: number) {
-  if (s > 300) return 'text-red-400'
-  if (s > 60)  return 'text-yellow-400'
+  if (s > 300) return 'text-ch-danger'
+  if (s > 60)  return 'text-ch-warning'
   return 'text-ch-text'
 }
 
 function memColor(bytes: number) {
-  if (bytes > 10 * 1024 ** 3) return 'text-red-400'
-  if (bytes > 1  * 1024 ** 3) return 'text-yellow-400'
+  if (bytes > 10 * 1024 ** 3) return 'text-ch-danger'
+  if (bytes > 1  * 1024 ** 3) return 'text-ch-warning'
   return 'text-ch-text'
 }
 
 function borderColor(elapsed: number) {
   if (elapsed > 300) return 'border-red-500/30'
-  if (elapsed > 60)  return 'border-yellow-500/30'
+  if (elapsed > 60)  return 'border-ch-warning/30'
   return 'border-ch-border'
 }
 
@@ -64,7 +64,7 @@ function ProcessCard({ row, onViewInLog }: { row: ProcessRow; onViewInLog: (id: 
           <span className="text-[10px] text-ch-muted border border-ch-border rounded px-1">sub-query</span>
         )}
         {row.is_cancelled === 1 && (
-          <span className="text-[10px] text-yellow-400 border border-yellow-500/30 rounded px-1">cancelling…</span>
+          <span className="text-[10px] text-ch-warning border border-ch-warning/30 rounded px-1">cancelling…</span>
         )}
         <span className={`text-xs font-mono font-semibold ${elapsedColor(row.elapsed)}`}>
           {fmtElapsed(row.elapsed)}
@@ -165,13 +165,13 @@ export function ProcessMonitor({ config, onViewInLog }: Props) {
           <h2 className="text-sm font-semibold text-ch-text">Live Processes</h2>
           <span className="flex items-center gap-1.5 text-xs text-ch-muted">
             {paused ? (
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-400 border border-yellow-500/30">
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-ch-warning/15 text-ch-warning border border-ch-warning/30">
                 PAUSED
               </span>
             ) : isLoading ? (
               <Loader2 className="w-3 h-3 animate-spin text-ch-accent" />
             ) : (
-              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              <span className="w-2 h-2 rounded-full bg-ch-success animate-pulse" />
             )}
             {paused ? 'snapshot frozen' : 'refreshing every 5s'}
           </span>
@@ -184,7 +184,7 @@ export function ProcessMonitor({ config, onViewInLog }: Props) {
             onClick={() => setPaused(v => !v)}
             className={`flex items-center gap-1.5 border rounded-lg px-2.5 py-1 transition-colors ${
               paused
-                ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20'
+                ? 'bg-ch-warning/10 border-ch-warning/30 text-ch-warning hover:bg-ch-warning/20'
                 : 'border-ch-border hover:text-ch-text hover:border-ch-accent/30'
             }`}
           >
@@ -202,7 +202,7 @@ export function ProcessMonitor({ config, onViewInLog }: Props) {
 
       {/* Error banner */}
       {error && (
-        <div className="flex items-start gap-2 px-6 py-3 bg-red-500/10 border-b border-red-500/20 text-red-400 text-xs flex-shrink-0">
+        <div className="flex items-start gap-2 px-6 py-3 bg-ch-danger/10 border-b border-red-500/20 text-ch-danger text-xs flex-shrink-0">
           <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <div className="min-w-0">
             <span className="font-semibold">Query failed: </span>
@@ -214,7 +214,7 @@ export function ProcessMonitor({ config, onViewInLog }: Props) {
       <div className="flex-1 overflow-auto p-6">
         {processes.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 gap-3">
-            <div className="w-10 h-10 rounded-full bg-green-500/10 border border-green-500/20 flex items-center justify-center text-green-400 text-xl">
+            <div className="w-10 h-10 rounded-full bg-ch-success/10 border border-green-500/20 flex items-center justify-center text-ch-success text-xl">
               ✓
             </div>
             <p className="text-sm text-ch-text font-medium">No active queries right now</p>
@@ -225,7 +225,7 @@ export function ProcessMonitor({ config, onViewInLog }: Props) {
             <p className="text-xs text-ch-muted mb-4">
               {processes.length} active {processes.length === 1 ? 'query' : 'queries'}
               {processes.filter(p => p.elapsed > 60).length > 0 && (
-                <span className="text-yellow-400 ml-2">
+                <span className="text-ch-warning ml-2">
                   · {processes.filter(p => p.elapsed > 60).length} slow (&gt;60s)
                 </span>
               )}

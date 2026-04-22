@@ -53,7 +53,7 @@ export function QueryDocs() {
             const isBlock = className?.startsWith('language-')
             if (isBlock) {
               return (
-                <code className="block bg-ch-bg border border-ch-border rounded-lg px-4 py-3 text-xs font-mono text-green-300 leading-relaxed overflow-x-auto whitespace-pre">
+                <code className="block bg-ch-bg border border-ch-border rounded-lg px-4 py-3 text-xs font-mono text-ch-success leading-relaxed overflow-x-auto whitespace-pre">
                   {children}
                 </code>
               )

@@ -16,20 +16,20 @@ interface Props {
 
 function DelayBadge({ delay }: { delay: number }) {
   if (delay === 0) return (
-    <span className="flex items-center gap-1 text-green-400 text-xs" title="This replica is fully caught up with the replication log">
+    <span className="flex items-center gap-1 text-ch-success text-xs" title="This replica is fully caught up with the replication log">
       <CheckCircle className="w-3 h-3" /> In sync
     </span>
   )
-  if (delay < 60) return <span className="text-yellow-400 text-xs" title={`${delay}s behind the most up-to-date replica`}>{delay}s behind</span>
-  if (delay < 300) return <span className="text-orange-400 text-xs" title={`${delay}s behind the most up-to-date replica`}>{Math.floor(delay / 60)}m behind</span>
-  return <span className="text-red-400 text-xs font-semibold" title={`${delay}s behind — significantly lagging`}>{Math.floor(delay / 60)}m behind !</span>
+  if (delay < 60) return <span className="text-ch-warning text-xs" title={`${delay}s behind the most up-to-date replica`}>{delay}s behind</span>
+  if (delay < 300) return <span className="text-ch-orange text-xs" title={`${delay}s behind the most up-to-date replica`}>{Math.floor(delay / 60)}m behind</span>
+  return <span className="text-ch-danger text-xs font-semibold" title={`${delay}s behind — significantly lagging`}>{Math.floor(delay / 60)}m behind !</span>
 }
 
 const QUEUE_TYPE_LABELS: Record<string, { label: string; color: string; description: string }> = {
-  GET_PART:     { label: 'Fetch',    color: 'text-blue-400',   description: 'Download a data part from another replica' },
-  MERGE_PARTS:  { label: 'Merge',    color: 'text-purple-400', description: 'Merge multiple small parts into a larger one (background compaction)' },
-  DROP_RANGE:   { label: 'Drop',     color: 'text-red-400',    description: 'Delete a range of parts (from TTL or DROP PARTITION)' },
-  MUTATE_PART:  { label: 'Mutate',   color: 'text-orange-400', description: 'Apply an ALTER UPDATE/DELETE mutation to a part' },
+  GET_PART:     { label: 'Fetch',    color: 'text-ch-info',   description: 'Download a data part from another replica' },
+  MERGE_PARTS:  { label: 'Merge',    color: 'text-ch-purple', description: 'Merge multiple small parts into a larger one (background compaction)' },
+  DROP_RANGE:   { label: 'Drop',     color: 'text-ch-danger',    description: 'Delete a range of parts (from TTL or DROP PARTITION)' },
+  MUTATE_PART:  { label: 'Mutate',   color: 'text-ch-orange', description: 'Apply an ALTER UPDATE/DELETE mutation to a part' },
   ATTACH_PART:  { label: 'Attach',   color: 'text-teal-400',   description: 'Attach a detached part back into the table' },
   MOVE_PART:    { label: 'Move',     color: 'text-cyan-400',   description: 'Move a part to a different disk tier' },
 }
@@ -66,7 +66,7 @@ function Stat({
       <span className="text-[10px] uppercase tracking-wider text-ch-muted flex items-center gap-0.5 whitespace-nowrap">
         {label}<Tooltip text={tooltip} />
       </span>
-      <span className={`text-sm font-mono font-semibold ${danger ? 'text-red-400' : warn ? 'text-yellow-400' : 'text-ch-text'}`}>
+      <span className={`text-sm font-mono font-semibold ${danger ? 'text-ch-danger' : warn ? 'text-ch-warning' : 'text-ch-text'}`}>
         {value}
       </span>
     </div>
@@ -92,7 +92,7 @@ function ReplicaRow({ r, queueItems }: { r: ReplicaInfo; queueItems: Replication
 
         {/* Health dot */}
         <span
-          className={`w-2 h-2 rounded-full flex-shrink-0 ${isHealthy ? 'bg-green-400' : r.is_readonly === 1 ? 'bg-red-400' : 'bg-yellow-400'}`}
+          className={`w-2 h-2 rounded-full flex-shrink-0 ${isHealthy ? 'bg-ch-success' : r.is_readonly === 1 ? 'bg-ch-danger' : 'bg-ch-warning'}`}
           title={isHealthy ? 'Healthy' : r.is_readonly === 1 ? 'Read-only — writes rejected' : 'Degraded'}
         />
 
@@ -106,12 +106,12 @@ function ReplicaRow({ r, queueItems }: { r: ReplicaInfo; queueItems: Replication
             </span>
           )}
           {r.is_readonly === 1 && (
-            <span className="text-[9px] bg-red-500/15 text-red-400 border border-red-500/25 px-1.5 py-0.5 rounded" title="Read-only mode: this replica cannot accept INSERTs. Usually caused by a lost ZooKeeper session, full disk, or misconfiguration.">
+            <span className="text-[9px] bg-ch-danger/15 text-ch-danger border border-red-500/25 px-1.5 py-0.5 rounded" title="Read-only mode: this replica cannot accept INSERTs. Usually caused by a lost ZooKeeper session, full disk, or misconfiguration.">
               READONLY
             </span>
           )}
           {r.is_session_expired === 1 && (
-            <span className="text-[9px] bg-orange-500/15 text-orange-400 border border-orange-500/25 px-1.5 py-0.5 rounded" title="ZooKeeper session expired: this replica has lost its coordination lease. It will try to reconnect.">
+            <span className="text-[9px] bg-orange-500/15 text-ch-orange border border-orange-500/25 px-1.5 py-0.5 rounded" title="ZooKeeper session expired: this replica has lost its coordination lease. It will try to reconnect.">
               ZK SESSION EXPIRED
             </span>
           )}
@@ -124,7 +124,7 @@ function ReplicaRow({ r, queueItems }: { r: ReplicaInfo; queueItems: Replication
 
         {/* Summary stats — always visible */}
         <div className="ml-auto flex items-center gap-5 flex-shrink-0">
-          <span className={`text-xs ${r.queue_size > 0 ? 'text-yellow-400' : 'text-ch-muted'}`}
+          <span className={`text-xs ${r.queue_size > 0 ? 'text-ch-warning' : 'text-ch-muted'}`}
             title="Total tasks in this replica's replication queue (parts to fetch, merges to run, mutations to apply)">
             Q: {r.queue_size}
           </span>
@@ -133,7 +133,7 @@ function ReplicaRow({ r, queueItems }: { r: ReplicaInfo; queueItems: Replication
           </span>
           <DelayBadge delay={r.absolute_delay} />
           {r.zookeeper_exception && (
-            <span className="text-red-400 text-xs" title={r.zookeeper_exception}>ZK err</span>
+            <span className="text-ch-danger text-xs" title={r.zookeeper_exception}>ZK err</span>
           )}
         </div>
       </button>
@@ -256,14 +256,14 @@ function ReplicaRow({ r, queueItems }: { r: ReplicaInfo; queueItems: Replication
           {(r.zookeeper_exception || r.last_queue_update_exception) && (
             <div className="space-y-1">
               {r.zookeeper_exception && (
-                <div className="bg-red-500/8 border border-red-500/20 rounded-lg px-3 py-2 text-xs">
-                  <span className="text-red-400 font-semibold">ZooKeeper error: </span>
+                <div className="bg-ch-danger/8 border border-red-500/20 rounded-lg px-3 py-2 text-xs">
+                  <span className="text-ch-danger font-semibold">ZooKeeper error: </span>
                   <span className="text-ch-muted">{r.zookeeper_exception}</span>
                 </div>
               )}
               {r.last_queue_update_exception && (
                 <div className="bg-orange-500/8 border border-orange-500/20 rounded-lg px-3 py-2 text-xs">
-                  <span className="text-orange-400 font-semibold">Queue update error: </span>
+                  <span className="text-ch-orange font-semibold">Queue update error: </span>
                   <span className="text-ch-muted">{r.last_queue_update_exception}</span>
                 </div>
               )}
@@ -285,16 +285,16 @@ function ReplicaRow({ r, queueItems }: { r: ReplicaInfo; queueItems: Replication
                       <span className="text-ch-muted flex-shrink-0">from {item.source_replica}</span>
                     )}
                     {item.num_tries > 1 && (
-                      <span className="text-orange-400 flex-shrink-0">{item.num_tries} tries</span>
+                      <span className="text-ch-orange flex-shrink-0">{item.num_tries} tries</span>
                     )}
                     {item.is_currently_executing === 1 && (
-                      <span className="text-yellow-400 flex-shrink-0 animate-pulse">running</span>
+                      <span className="text-ch-warning flex-shrink-0 animate-pulse">running</span>
                     )}
                   </div>
                 ))}
               </div>
               {queueItems.some(q => q.last_exception) && (
-                <div className="mt-1 text-xs text-red-400 bg-red-500/8 border border-red-500/20 rounded px-2 py-1.5">
+                <div className="mt-1 text-xs text-ch-danger bg-ch-danger/8 border border-red-500/20 rounded px-2 py-1.5">
                   {queueItems.find(q => q.last_exception)?.last_exception}
                 </div>
               )}
@@ -341,35 +341,35 @@ function TableCard({
 
         {/* Overall health icon */}
         {hasErrors
-          ? <XCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+          ? <XCircle className="w-4 h-4 text-ch-danger flex-shrink-0" />
           : hasWarning
-            ? <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0" />
-            : <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />
+            ? <AlertTriangle className="w-4 h-4 text-ch-warning flex-shrink-0" />
+            : <CheckCircle className="w-4 h-4 text-ch-success flex-shrink-0" />
         }
 
         <span className="font-semibold text-sm text-ch-text">{tableKey}</span>
 
         {/* Executing badge */}
         {executingCount > 0 && (
-          <span className="flex items-center gap-1 text-[10px] bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-1.5 py-0.5 rounded" title="Replication tasks currently being executed">
+          <span className="flex items-center gap-1 text-[10px] bg-ch-warning/10 text-ch-warning border border-yellow-500/20 px-1.5 py-0.5 rounded" title="Replication tasks currently being executed">
             <Activity className="w-2.5 h-2.5 animate-pulse" />{executingCount} running
           </span>
         )}
 
         <div className="ml-auto flex items-center gap-5 flex-shrink-0 text-xs">
           <span className="text-ch-muted" title="Active replicas vs total configured replicas for this table">
-            <span className={activeReplicas < totalReplicas ? 'text-yellow-400 font-medium' : 'text-ch-text'}>
+            <span className={activeReplicas < totalReplicas ? 'text-ch-warning font-medium' : 'text-ch-text'}>
               {activeReplicas}
             </span>/{totalReplicas} replicas
           </span>
           {totalQueue > 0 && (
-            <span className={totalQueue > 100 ? 'text-red-400' : 'text-yellow-400'} title="Total replication queue depth across all replicas">
+            <span className={totalQueue > 100 ? 'text-ch-danger' : 'text-ch-warning'} title="Total replication queue depth across all replicas">
               Q: {totalQueue}
             </span>
           )}
           <DelayBadge delay={maxDelay} />
           {!hasLeader && (
-            <span className="text-orange-400" title="No replica is currently acting as leader — merge scheduling may be paused">no leader</span>
+            <span className="text-ch-orange" title="No replica is currently acting as leader — merge scheduling may be paused">no leader</span>
           )}
           <button
             onClick={e => { e.stopPropagation(); onTogglePin() }}
@@ -398,10 +398,10 @@ function TableCard({
 function ActiveQueueBanner({ items }: { items: ReplicationQueueItem[] }) {
   if (items.length === 0) return null
   return (
-    <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-3">
+    <div className="bg-ch-warning/5 border border-yellow-500/20 rounded-xl p-3">
       <div className="flex items-center gap-2 mb-2">
-        <Activity className="w-4 h-4 text-yellow-400 animate-pulse" />
-        <span className="text-sm font-semibold text-yellow-400">{items.length} task{items.length > 1 ? 's' : ''} executing now</span>
+        <Activity className="w-4 h-4 text-ch-warning animate-pulse" />
+        <span className="text-sm font-semibold text-ch-warning">{items.length} task{items.length > 1 ? 's' : ''} executing now</span>
       </div>
       <div className="space-y-1.5">
         {items.slice(0, 10).map((item, i) => (
@@ -410,7 +410,7 @@ function ActiveQueueBanner({ items }: { items: ReplicationQueueItem[] }) {
             <span className="font-medium text-ch-text">{item.database}.{item.table}</span>
             <span className="text-ch-muted font-mono truncate">{item.new_part_name}</span>
             {item.source_replica && <span className="text-ch-muted flex-shrink-0">← {item.source_replica}</span>}
-            {item.num_tries > 1 && <span className="text-orange-400 flex-shrink-0">{item.num_tries} tries</span>}
+            {item.num_tries > 1 && <span className="text-ch-orange flex-shrink-0">{item.num_tries} tries</span>}
           </div>
         ))}
         {items.length > 10 && <div className="text-xs text-ch-muted">…and {items.length - 10} more</div>}
@@ -483,23 +483,23 @@ export function ReplicationStatus({ replicas, queue }: Props) {
           <div className="text-[10px] uppercase tracking-wider text-ch-muted flex items-center gap-1">
             Issues <Tooltip text="Tables with read-only replicas, expired ZK sessions, or ZooKeeper errors" />
           </div>
-          <div className={`text-xl font-bold mt-0.5 ${tablesWithIssues > 0 ? 'text-red-400' : 'text-green-400'}`}>
+          <div className={`text-xl font-bold mt-0.5 ${tablesWithIssues > 0 ? 'text-ch-danger' : 'text-ch-success'}`}>
             {tablesWithIssues}
           </div>
         </div>
-        <div className={`bg-ch-surface border rounded-xl px-4 py-3 ${totalQueueDepth > 100 ? 'border-yellow-500/30' : 'border-ch-border'}`}>
+        <div className={`bg-ch-surface border rounded-xl px-4 py-3 ${totalQueueDepth > 100 ? 'border-ch-warning/30' : 'border-ch-border'}`}>
           <div className="text-[10px] uppercase tracking-wider text-ch-muted flex items-center gap-1">
             Queue Depth <Tooltip text="Total pending replication tasks across all tables and replicas on this node" />
           </div>
-          <div className={`text-xl font-bold mt-0.5 ${totalQueueDepth > 100 ? 'text-yellow-400' : totalQueueDepth > 0 ? 'text-ch-text' : 'text-green-400'}`}>
+          <div className={`text-xl font-bold mt-0.5 ${totalQueueDepth > 100 ? 'text-ch-warning' : totalQueueDepth > 0 ? 'text-ch-text' : 'text-ch-success'}`}>
             {totalQueueDepth}
           </div>
         </div>
-        <div className={`bg-ch-surface border rounded-xl px-4 py-3 ${maxDelay > 300 ? 'border-red-500/30' : maxDelay > 60 ? 'border-yellow-500/30' : 'border-ch-border'}`}>
+        <div className={`bg-ch-surface border rounded-xl px-4 py-3 ${maxDelay > 300 ? 'border-red-500/30' : maxDelay > 60 ? 'border-ch-warning/30' : 'border-ch-border'}`}>
           <div className="text-[10px] uppercase tracking-wider text-ch-muted flex items-center gap-1">
             Max Delay <Tooltip text="Highest replication lag across all tables. This is how far behind the slowest replica is, in seconds." />
           </div>
-          <div className={`text-xl font-bold mt-0.5 ${maxDelay > 300 ? 'text-red-400' : maxDelay > 60 ? 'text-yellow-400' : 'text-green-400'}`}>
+          <div className={`text-xl font-bold mt-0.5 ${maxDelay > 300 ? 'text-ch-danger' : maxDelay > 60 ? 'text-ch-warning' : 'text-ch-success'}`}>
             {maxDelay === 0 ? '0s' : maxDelay < 60 ? `${maxDelay}s` : `${Math.floor(maxDelay / 60)}m`}
           </div>
         </div>

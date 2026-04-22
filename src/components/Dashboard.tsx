@@ -3,6 +3,7 @@ import {
   RefreshCw, LogOut, Activity, Database, GitBranch, TreePine,
   BarChart3, AlertCircle, ChevronDown, BookOpen, HelpCircle,
   FileText, HardDrive, Terminal, Wrench, HardDriveDownload, Server, Settings,
+  Sun, Moon,
 } from 'lucide-react'
 import { useClusterData } from '../hooks/useClusterData'
 import { ClusterTopology } from './ClusterTopology'
@@ -20,6 +21,7 @@ import { HostsPanel } from './HostsPanel'
 import { ClusterConfig } from './ClusterConfig'
 import { ErrorBoundary } from './ErrorBoundary'
 import { useUrlState } from '../hooks/useUrlState'
+import { useTheme } from '../hooks/useTheme'
 import { safeNum } from '../api/clickhouse'
 import type { ConnectionConfig, ActiveTab } from '../types'
 
@@ -47,6 +49,7 @@ const TABS: { id: ActiveTab; label: string; icon: React.ReactNode }[] = [
 const TAB_IDS = TABS.map(t => t.id) as ActiveTab[]
 
 export function Dashboard({ config, version, onDisconnect }: Props) {
+  const { theme, toggle: toggleTheme } = useTheme()
   // Tab is persisted in the URL hash (#tab=topology) — survives page refresh and is shareable.
   const [tab, setTab]               = useUrlState<ActiveTab>('tab', 'topology', TAB_IDS)
   const [showHelp, setShowHelp]     = useState(false)
@@ -155,20 +158,20 @@ export function Dashboard({ config, version, onDisconnect }: Props) {
             Replicas: <span className="text-ch-text font-semibold">{replicaCount}</span>
           </span>
           {unhealthy > 0 && (
-            <span className="flex items-center gap-1 text-red-400">
+            <span className="flex items-center gap-1 text-ch-danger">
               <AlertCircle className="w-3.5 h-3.5" />
               {unhealthy} unhealthy
             </span>
           )}
           {activeJobs > 0 && (
-            <span className="flex items-center gap-1 text-yellow-400">
+            <span className="flex items-center gap-1 text-ch-warning">
               <Activity className="w-3.5 h-3.5" />
               {activeJobs} replicating
             </span>
           )}
           {(diskDanger ?? diskWarning) && (
             <span
-              className={`flex items-center gap-1 cursor-pointer ${diskDanger ? 'text-red-400' : 'text-yellow-400'}`}
+              className={`flex items-center gap-1 cursor-pointer ${diskDanger ? 'text-ch-danger' : 'text-ch-warning'}`}
               onClick={() => setTab('parts')}
               title={`${(diskDanger ?? diskWarning)!.name}: ${((safeNum((diskDanger ?? diskWarning)!.used_fraction)) * 100).toFixed(0)}% used`}
             >
@@ -177,7 +180,7 @@ export function Dashboard({ config, version, onDisconnect }: Props) {
             </span>
           )}
           {errorCount > 0 && (
-            <span className="flex items-center gap-1 text-orange-400" title={`${serverErrors.length} error type(s) — ${errorCount} total occurrences`}>
+            <span className="flex items-center gap-1 text-ch-orange" title={`${serverErrors.length} error type(s) — ${errorCount} total occurrences`}>
               <AlertCircle className="w-3.5 h-3.5" />
               {serverErrors.length} server error{serverErrors.length !== 1 ? 's' : ''}
             </span>
@@ -202,6 +205,13 @@ export function Dashboard({ config, version, onDisconnect }: Props) {
           </div>
 
           <button
+            onClick={toggleTheme}
+            className="flex items-center gap-1.5 text-xs text-ch-muted hover:text-ch-text border border-ch-border rounded-lg px-3 py-1.5 transition-colors hover:border-ch-accent/30"
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+          >
+            {theme === 'dark' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+          </button>
+          <button
             onClick={refetchAll}
             className="flex items-center gap-1.5 text-xs text-ch-muted hover:text-ch-text border border-ch-border rounded-lg px-3 py-1.5 transition-colors hover:border-ch-accent/30"
           >
@@ -210,7 +220,7 @@ export function Dashboard({ config, version, onDisconnect }: Props) {
           </button>
           <button
             onClick={onDisconnect}
-            className="flex items-center gap-1.5 text-xs text-ch-muted hover:text-red-400 border border-ch-border rounded-lg px-3 py-1.5 transition-colors"
+            className="flex items-center gap-1.5 text-xs text-ch-muted hover:text-ch-danger border border-ch-border rounded-lg px-3 py-1.5 transition-colors"
           >
             <LogOut className="w-3.5 h-3.5" />
             Disconnect
@@ -233,7 +243,7 @@ export function Dashboard({ config, version, onDisconnect }: Props) {
             {t.icon}
             {t.label}
             {t.id === 'replication' && activeJobs > 0 && (
-              <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 ml-0.5" />
+              <span className="w-1.5 h-1.5 rounded-full bg-ch-warning ml-0.5" />
             )}
           </button>
         ))}
@@ -253,7 +263,7 @@ export function Dashboard({ config, version, onDisconnect }: Props) {
 
       {/* Error banner */}
       {error && (
-        <div className="flex items-center gap-2 px-4 py-2 bg-red-500/10 border-b border-red-500/20 text-red-400 text-xs flex-shrink-0">
+        <div className="flex items-center gap-2 px-4 py-2 bg-ch-danger/10 border-b border-red-500/20 text-ch-danger text-xs flex-shrink-0">
           <AlertCircle className="w-4 h-4 flex-shrink-0" />
           {error.message}
         </div>

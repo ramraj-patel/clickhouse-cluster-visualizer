@@ -680,9 +680,9 @@ function SqlBlock({ query }: { query: Query }) {
 // ── Severity dot ──────────────────────────────────────────────────────────────
 
 const severityColor = {
-  info:   'bg-blue-400',
-  warn:   'bg-yellow-400',
-  danger: 'bg-red-400',
+  info:   'bg-ch-info',
+  warn:   'bg-ch-warning',
+  danger: 'bg-ch-danger',
 }
 
 // ── Drawer ────────────────────────────────────────────────────────────────────

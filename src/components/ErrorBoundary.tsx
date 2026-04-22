@@ -55,7 +55,7 @@ export class ErrorBoundary extends Component<Props, State> {
       <div className="flex items-start justify-center p-8">
         <div className="max-w-lg w-full bg-ch-surface border border-red-500/30 rounded-xl p-6">
           <div className="flex items-center gap-2 mb-3">
-            <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0" />
+            <AlertTriangle className="w-5 h-5 text-ch-danger flex-shrink-0" />
             <span className="text-sm font-semibold text-ch-text">
               {this.props.label ? `${this.props.label} crashed` : 'Something went wrong'}
             </span>
@@ -65,7 +65,7 @@ export class ErrorBoundary extends Component<Props, State> {
             You can try resetting this panel or switching to another tab.
           </p>
           {this.state.error && (
-            <pre className="text-[10px] text-red-400/80 bg-ch-bg rounded-lg p-3 overflow-auto max-h-32 mb-4 font-mono leading-relaxed">
+            <pre className="text-[10px] text-ch-danger/80 bg-ch-bg rounded-lg p-3 overflow-auto max-h-32 mb-4 font-mono leading-relaxed">
               {this.state.error.message}
             </pre>
           )}

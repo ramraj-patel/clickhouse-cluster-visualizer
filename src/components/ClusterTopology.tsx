@@ -46,9 +46,9 @@ function CopyButton({ data }: { data: object }) {
       style={{
         position: 'absolute', top: 4, right: 4,
         padding: '2px 4px', borderRadius: 4, cursor: 'pointer',
-        background: copied ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.06)',
-        border: copied ? '1px solid rgba(34,197,94,0.4)' : '1px solid rgba(255,255,255,0.1)',
-        color: copied ? '#22c55e' : '#64748b',
+        background: copied ? 'var(--ch-success-bg)' : 'var(--ch-node-border)',
+        border: copied ? '1px solid var(--ch-success)' : '1px solid var(--ch-node-border)',
+        color: copied ? 'var(--ch-success)' : 'var(--ch-muted)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         transition: 'all 0.15s',
         opacity: 0.7,
@@ -92,11 +92,11 @@ function isSystemCluster(name: string) {
   return SYSTEM_CLUSTER_RE.test(name)
 }
 
-const healthColor = { healthy: '#22c55e', degraded: '#f59e0b', down: '#ef4444' }
+const healthColor = { healthy: 'var(--ch-success)', degraded: 'var(--ch-warning)', down: 'var(--ch-danger)' }
 const healthBg    = {
-  healthy: 'rgba(34,197,94,0.08)',
-  degraded: 'rgba(245,158,11,0.08)',
-  down: 'rgba(239,68,68,0.08)',
+  healthy: 'var(--ch-success-bg)',
+  degraded: 'var(--ch-warning-bg)',
+  down: 'var(--ch-danger-bg)',
 }
 
 // ─── Layout constants ────────────────────────────────────────────────────────
@@ -216,18 +216,18 @@ function buildGraph(clusters: ClusterNode[], replicas: ReplicaInfo[]) {
           <div style={{ position: 'relative', width: '100%', height: '100%',
             display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 28px 0 8px' }}>
             <div className="flex items-center gap-2 min-w-0">
-              <span className="font-bold text-[13px] tracking-wide truncate" style={{ color: '#ffcc00' }}>
+              <span className="font-bold text-[13px] tracking-wide truncate" style={{ color: 'var(--ch-accent)' }}>
                 {clusterName}
               </span>
               {isSys && (
                 <span className="text-[9px] px-1.5 py-0.5 rounded-full border flex-shrink-0"
-                  style={{ color: '#94a3b8', borderColor: 'rgba(148,163,184,0.3)', background: 'rgba(148,163,184,0.08)' }}>
+                  style={{ color: 'var(--ch-muted)', borderColor: 'rgba(148,163,184,0.3)', background: 'rgba(148,163,184,0.08)' }}>
                   SYSTEM
                 </span>
               )}
               {clusterUnhealthy > 0 && (
                 <span className="text-[9px] px-1.5 py-0.5 rounded-full border flex-shrink-0"
-                  style={{ color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)' }}>
+                  style={{ color: 'var(--ch-danger)', borderColor: 'rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)' }}>
                   {clusterUnhealthy} ⚠
                 </span>
               )}
@@ -239,8 +239,8 @@ function buildGraph(clusters: ClusterNode[], replicas: ReplicaInfo[]) {
       style: {
         width,
         height: CLUSTER_HEADER_H,
-        background: isSys ? 'rgba(148,163,184,0.04)' : 'rgba(255,204,0,0.06)',
-        border: isSys ? '1px solid rgba(148,163,184,0.2)' : '1px solid rgba(255,204,0,0.25)',
+        background: isSys ? 'var(--ch-cluster-sys-bg)' : 'var(--ch-cluster-bg)',
+        border: isSys ? '1px solid var(--ch-cluster-sys-border)' : '1px solid var(--ch-cluster-border)',
         borderRadius: 12,
       },
       sourcePosition: Position.Bottom,
@@ -272,12 +272,12 @@ function buildGraph(clusters: ClusterNode[], replicas: ReplicaInfo[]) {
           label: (
             <div style={{ width: '100%' }} className="text-center">
               <div style={{ color: shardColor, fontSize: 11, fontWeight: 700 }}>Shard {shardNum}</div>
-              <div style={{ color: '#64748b', fontSize: 10, marginTop: 2 }}>
+              <div style={{ color: 'var(--ch-muted)', fontSize: 10, marginTop: 2 }}>
                 {activeReplicas}/{totalReplicas} active
                 {weight !== 1 && <span style={{ marginLeft: 4 }}>· w:{weight}</span>}
               </div>
               {hasQueue && (
-                <div style={{ color: '#f59e0b', fontSize: 9, marginTop: 2 }}>● replicating</div>
+                <div style={{ color: 'var(--ch-warning)', fontSize: 9, marginTop: 2 }}>● replicating</div>
               )}
             </div>
           ),
@@ -285,7 +285,7 @@ function buildGraph(clusters: ClusterNode[], replicas: ReplicaInfo[]) {
         style: {
           width: SHARD_WIDTH,
           height: shardHeight,
-          background: 'rgba(42,45,62,0.6)',
+          background: 'var(--ch-shard-bg)',
           border: `1px solid ${shardColor}44`,
           borderRadius: 10,
           fontSize: 11,
@@ -304,12 +304,12 @@ function buildGraph(clusters: ClusterNode[], replicas: ReplicaInfo[]) {
         target: shardNodeId,
         animated: clusterHasQueue,
         style: {
-          stroke: isSys ? 'rgba(148,163,184,0.2)' : 'rgba(255,204,0,0.2)',
+          stroke: isSys ? 'var(--ch-cluster-sys-border)' : 'var(--ch-cluster-border)',
           strokeWidth: 1,
         },
         markerEnd: {
           type: MarkerType.ArrowClosed,
-          color: isSys ? 'rgba(148,163,184,0.3)' : 'rgba(255,204,0,0.3)',
+          color: isSys ? 'var(--ch-cluster-sys-border)' : 'var(--ch-cluster-border)',
         },
       })
 
@@ -340,7 +340,7 @@ function buildGraph(clusters: ClusterNode[], replicas: ReplicaInfo[]) {
                 {/* Row 1: health dot + hostname + leader + LOCAL */}
                 <div className="flex items-center gap-1 mb-1" style={{ paddingRight: 18 }}>
                   <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
-                  <span className="font-semibold truncate flex-1" style={{ color: '#f1f5f9', fontSize: 11 }}
+                  <span className="font-semibold truncate flex-1" style={{ color: 'var(--ch-text)', fontSize: 11 }}
                     title={node.host_name}>
                     {node.host_name}
                   </span>
@@ -356,10 +356,10 @@ function buildGraph(clusters: ClusterNode[], replicas: ReplicaInfo[]) {
                 </div>
 
                 {/* Row 2: IP:port + replica # */}
-                <div style={{ color: '#64748b' }} className="mb-1">
+                <div style={{ color: 'var(--ch-muted)' }} className="mb-1">
                   {node.host_address}:{node.port} · #{node.replica_num}
                   {node.errors_count > 0 && (
-                    <span style={{ color: '#ef4444', marginLeft: 4 }}>{node.errors_count} err</span>
+                    <span style={{ color: 'var(--ch-danger)', marginLeft: 4 }}>{node.errors_count} err</span>
                   )}
                 </div>
 
@@ -373,7 +373,7 @@ function buildGraph(clusters: ClusterNode[], replicas: ReplicaInfo[]) {
                     </span>
                   )}
                   {totalQueue > 0 && (
-                    <span style={{ color: '#f59e0b' }}>↻ {totalQueue} queued</span>
+                    <span style={{ color: 'var(--ch-warning)' }}>↻ {totalQueue} queued</span>
                   )}
                 </div>
 
@@ -383,14 +383,14 @@ function buildGraph(clusters: ClusterNode[], replicas: ReplicaInfo[]) {
                     {isReadonly && (
                       <span style={{
                         fontSize: 8, background: 'rgba(239,68,68,0.12)',
-                        color: '#ef4444', padding: '1px 4px', borderRadius: 3,
+                        color: 'var(--ch-danger)', padding: '1px 4px', borderRadius: 3,
                         border: '1px solid rgba(239,68,68,0.25)',
                       }}>READONLY</span>
                     )}
                     {isExpired && (
                       <span style={{
                         fontSize: 8, background: 'rgba(245,158,11,0.12)',
-                        color: '#f59e0b', padding: '1px 4px', borderRadius: 3,
+                        color: 'var(--ch-warning)', padding: '1px 4px', borderRadius: 3,
                         border: '1px solid rgba(245,158,11,0.25)',
                       }}>ZK EXPIRED</span>
                     )}
@@ -463,7 +463,7 @@ function NodeDrillDownPanel({
       <div className="flex items-center gap-2 px-4 py-3 border-b border-ch-border flex-shrink-0">
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-            node.errors_count > 5 ? 'bg-red-500' : node.estimated_recovery_time > 0 ? 'bg-yellow-500' : 'bg-green-500'
+            node.errors_count > 5 ? 'bg-ch-danger' : node.estimated_recovery_time > 0 ? 'bg-ch-warning' : 'bg-ch-success'
           }`} />
           <span className="text-sm font-semibold text-ch-text truncate">{node.host_name}</span>
         </div>
@@ -491,20 +491,20 @@ function NodeDrillDownPanel({
           </div>
           <div className="flex flex-wrap gap-1.5 mt-1.5">
             {node.is_local === 1 && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded border bg-blue-500/10 text-blue-400 border-blue-500/20">LOCAL</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded border bg-blue-500/10 text-ch-info border-blue-500/20">LOCAL</span>
             )}
             {node.errors_count > 0 && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded border bg-red-500/10 text-red-400 border-red-500/20">
+              <span className="text-[10px] px-1.5 py-0.5 rounded border bg-ch-danger/10 text-ch-danger border-red-500/20">
                 {node.errors_count} errors
               </span>
             )}
             {node.slowdowns_count > 0 && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded border bg-yellow-500/10 text-yellow-400 border-yellow-500/20">
+              <span className="text-[10px] px-1.5 py-0.5 rounded border bg-ch-warning/10 text-ch-warning border-yellow-500/20">
                 {node.slowdowns_count} slowdowns
               </span>
             )}
             {node.estimated_recovery_time > 0 && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded border bg-orange-500/10 text-orange-400 border-orange-500/20">
+              <span className="text-[10px] px-1.5 py-0.5 rounded border bg-orange-500/10 text-ch-orange border-orange-500/20">
                 recovering ~{node.estimated_recovery_time}s
               </span>
             )}
@@ -527,11 +527,11 @@ function NodeDrillDownPanel({
                     key={`${r.database}.${r.table}`}
                     className={`bg-ch-bg rounded-lg px-3 py-2 border ${
                       r.is_readonly || r.is_session_expired ? 'border-red-500/30' :
-                      r.absolute_delay > 300 ? 'border-yellow-500/30' : 'border-ch-border/50'
+                      r.absolute_delay > 300 ? 'border-ch-warning/30' : 'border-ch-border/50'
                     }`}
                   >
                     <div className="flex items-center gap-1.5 mb-1">
-                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isHealthy ? 'bg-green-500' : 'bg-yellow-500'}`} />
+                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isHealthy ? 'bg-ch-success' : 'bg-ch-warning'}`} />
                       <span className="text-[11px] font-semibold text-ch-text truncate">
                         <span className="text-ch-muted font-normal">{r.database}.</span>{r.table}
                       </span>
@@ -539,16 +539,16 @@ function NodeDrillDownPanel({
                     </div>
                     <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-ch-muted">
                       {r.queue_size > 0 && (
-                        <span className="text-yellow-400">q:{r.queue_size}</span>
+                        <span className="text-ch-warning">q:{r.queue_size}</span>
                       )}
                       {r.absolute_delay > 0 && (
-                        <span className={r.absolute_delay > 300 ? 'text-red-400' : r.absolute_delay > 60 ? 'text-yellow-400' : ''}>
+                        <span className={r.absolute_delay > 300 ? 'text-ch-danger' : r.absolute_delay > 60 ? 'text-ch-warning' : ''}>
                           lag:{r.absolute_delay}s
                         </span>
                       )}
                       <span>{r.active_replicas}/{r.total_replicas} active</span>
-                      {r.is_readonly === 1 && <span className="text-red-400">READONLY</span>}
-                      {r.is_session_expired === 1 && <span className="text-orange-400">ZK EXPIRED</span>}
+                      {r.is_readonly === 1 && <span className="text-ch-danger">READONLY</span>}
+                      {r.is_session_expired === 1 && <span className="text-ch-orange">ZK EXPIRED</span>}
                     </div>
                   </div>
                 )
@@ -866,8 +866,8 @@ export function ClusterTopology({ clusters, replicas, tables = [], config }: Pro
       source: clusterNodeId,
       target: `shard-${parsed.cluster}-${shardNum}`,
       animated: true,
-      style: { stroke: '#ffcc00', strokeWidth: 2, strokeDasharray: '6 3' },
-      markerEnd: { type: MarkerType.ArrowClosed, color: '#ffcc00' },
+      style: { stroke: 'var(--ch-accent)', strokeWidth: 2, strokeDasharray: '6 3' },
+      markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--ch-accent)' },
       zIndex: 10,
     }))
 
@@ -943,7 +943,7 @@ export function ClusterTopology({ clusters, replicas, tables = [], config }: Pro
           }}
           onPaneClick={() => setSelectedNode(null)}
         >
-          <Background color="#2a2d3e" gap={24} />
+          <Background color="var(--ch-border)" gap={24} />
           <Controls
             className="!bg-ch-surface !border-ch-border"
             onInteractiveChange={interactive => setZoomOnScroll(interactive)}
@@ -954,7 +954,7 @@ export function ClusterTopology({ clusters, replicas, tables = [], config }: Pro
               if (n.id.startsWith('shard-')) return 'rgba(42,45,62,0.8)'
               return '#22c55e'
             }}
-            style={{ background: '#1a1d27', border: '1px solid #2a2d3e' }}
+            style={{ background: 'var(--ch-surface)', border: '1px solid var(--ch-border)' }}
           />
 
           {/* ── Top-left: cluster filter ── */}
